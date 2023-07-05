@@ -8,7 +8,7 @@ os.environ["NUMEXPR_NUM_THREADS"] = "1"
 
 from abc import ABC, abstractmethod
 import argparse
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import Enum, auto
 from functools import partial
 from multiprocessing import get_context
@@ -27,8 +27,7 @@ from omegaconf import OmegaConf, DictConfig, MISSING
 import torch
 from tqdm import tqdm
 
-from utils.preprocessing import _blosc_opts
-from data.utils.representations import MixedDensityEventStack, StackedHistogram, RepresentationBase
+from data.utils.representations import EventSurface, RepresentationBase
 
 
 class DataKeys(Enum):
@@ -70,20 +69,48 @@ class NoLabelsException(Exception):
 
 
 class H5Writer:
-    def __init__(self, outfile: Path, key: str, ev_repr_shape: Tuple, numpy_dtype: np.dtype):
-        assert len(ev_repr_shape) == 3
+    def __init__(self, outfile: Path):
         self.h5f = h5py.File(str(outfile), 'w')
         self._finalizer = weakref.finalize(self, self.close_callback, self.h5f)
-        self.key = key
-        self.numpy_dtype = numpy_dtype
 
-        # create hdf5 datasets
-        maxshape = (None,) + ev_repr_shape
-        chunkshape = (1,) + ev_repr_shape
-        self.maxshape = maxshape
-        self.h5f.create_dataset(key, dtype=self.numpy_dtype.name, shape=chunkshape, chunks=chunkshape,
-                                maxshape=maxshape, **_blosc_opts(complevel=1, shuffle='byte'))
+        # create hdf5 datasets for pos
+        maxshape = (None, 2)
+        chunkshape = (1, 2)
+        self.pos_key = 'pos'
+        self.pos_dtype = np.uint8
+        self.h5f.create_dataset(self.pos_key, dtype=self.pos_dtype,
+                                shape=chunkshape, chunks=chunkshape,
+                                maxshape=maxshape)
+        
+        # create hdf5 datasets for time
+        maxshape = (None,)
+        chunkshape = (1,)
+        self.time_key = 'time'
+        self.time_dtype = np.uint32
+        self.h5f.create_dataset(self.time_key, dtype=self.time_dtype,
+                                shape=chunkshape, chunks=chunkshape,
+                                maxshape=maxshape)
+        
+        # create hdf5 datasets for polarity
+        maxshape = (None,)
+        chunkshape = (1,)
+        self.events_key = 'events'
+        self.events_dtype = np.bool_
+        self.h5f.create_dataset(self.events_key, dtype=self.events_dtype,
+                                shape=chunkshape, chunks=chunkshape,
+                                maxshape=maxshape)
+        
+        # create frame_idx, start and stop indices
+        maxshape = (None, 3)
+        chunkshape = (1, 3)
+        self.indices_key = 'indices'
+        self.indices_dtype = np.uint32
+        self.h5f.create_dataset(self.indices_key, dtype=self.indices_dtype,
+                                shape=chunkshape, chunks=chunkshape,
+                                maxshape=maxshape)
+
         self.t_idx = 0
+        self.counter = 0
 
     def __enter__(self):
         return self
@@ -98,15 +125,26 @@ class H5Writer:
     def close(self):
         self.h5f.close()
 
-    def get_current_length(self):
-        return self.t_idx
+    def add_data(self, xytp: np.ndarray, frame_idx: int):
+        pos = xytp[:, :2].astype(self.pos_dtype)
+        time = xytp[:, 2].astype(self.time_dtype)
+        events = xytp[:, 3].astype(self.events_dtype)
 
-    def add_data(self, data: np.ndarray):
-        assert data.dtype == self.numpy_dtype, f'{data.dtype=}, {self.numpy_dtype=}'
-        assert data.shape == self.maxshape[1:]
-        new_size = self.t_idx + 1
-        self.h5f[self.key].resize(new_size, axis=0)
-        self.h5f[self.key][self.t_idx:new_size] = data
+        new_size = self.t_idx + xytp.shape[0]
+
+        self.h5f[self.pos_key].resize(new_size, axis=0)
+        self.h5f[self.pos_key][self.t_idx:new_size] = pos
+
+        self.h5f[self.time_key].resize(new_size, axis=0)
+        self.h5f[self.time_key][self.t_idx:new_size] = time
+
+        self.h5f[self.events_key].resize(new_size, axis=0)
+        self.h5f[self.events_key][self.t_idx:new_size] = events
+
+        num_data = self.h5f[self.indices_key].shape[0]
+        self.h5f[self.indices_key].resize(num_data+1, axis=0)
+        self.h5f[self.indices_key][num_data] = [frame_idx, self.t_idx, new_size]
+
         self.t_idx = new_size
 
 
@@ -488,20 +526,10 @@ def write_event_representations(in_h5_file: Path,
     ev_outfile_in_progress = ev_outfile.parent / (ev_outfile.stem + '_in_progress' + ev_outfile.suffix)
     if ev_outfile_in_progress.exists():
         os.remove(ev_outfile_in_progress)
-    ev_repr_shape = tuple(event_representation.get_shape())
     if downsample_by_2:
-        ev_repr_shape = ev_repr_shape[0], ev_repr_shape[1] // 2, ev_repr_shape[2] // 2
-    ev_repr_dtype = event_representation.get_numpy_dtype()
+        raise NotImplementedError
     with H5Reader(in_h5_file, dataset=dataset) as h5_reader, \
-            H5Writer(ev_outfile_in_progress,
-                     key='data',
-                     ev_repr_shape=ev_repr_shape,
-                     numpy_dtype=ev_repr_dtype) as h5_writer:
-        height, width = h5_reader.get_height_and_width()
-        if downsample_by_2:
-            assert (height // 2, width // 2) == ev_repr_shape[-2:]
-        else:
-            assert (height, width) == ev_repr_shape[-2:]
+            H5Writer(ev_outfile_in_progress) as h5_writer:
         ev_ts_us = h5_reader.time
 
         end_indices = np.searchsorted(ev_ts_us, ev_repr_timestamps_us, side='right')
@@ -511,22 +539,23 @@ def write_event_representations(in_h5_file: Path,
             assert ev_repr_delta_ts_ms is not None
             start_indices = np.searchsorted(ev_ts_us, ev_repr_timestamps_us - ev_repr_delta_ts_ms * 1000, side='left')
 
-        for idx_start, idx_end in zip(start_indices, end_indices):
+        for i, (idx_start, idx_end) in enumerate(zip(start_indices, end_indices)):
             ev_window = h5_reader.get_event_slice(idx_start=idx_start, idx_end=idx_end)
+            
+            # sometimes there are no events in the window
+            if ev_window['x'].shape[0] < 2**5:
+                continue
 
             ev_repr = event_representation.construct(x=ev_window['x'],
                                                      y=ev_window['y'],
                                                      pol=ev_window['p'],
                                                      time=ev_window['t'])
             if downsample_by_2:
-                ev_repr = ev_repr.unsqueeze(0)
-                ev_repr = downsample_ev_repr(x=ev_repr, scale_factor=0.5)
-                ev_repr_numpy = ev_repr.numpy()[0]
+                raise NotImplementedError
             else:
                 ev_repr_numpy = ev_repr.numpy()
-            h5_writer.add_data(ev_repr_numpy)
-        num_written_ev_repr = h5_writer.get_current_length()
-    assert num_written_ev_repr == len(ev_repr_timestamps_us)
+            h5_writer.add_data(ev_repr_numpy, i)
+    assert i == len(ev_repr_timestamps_us)-1
     os.rename(ev_outfile_in_progress, ev_outfile)
 
 
@@ -605,29 +634,6 @@ class EventWindowExtractionConf:
     value: int = MISSING
 
 
-@dataclass
-class StackedHistogramConf:
-    name: str = MISSING
-    nbins: int = MISSING
-    count_cutoff: Optional[int] = MISSING
-    event_window_extraction: EventWindowExtractionConf = field(default_factory=EventWindowExtractionConf)
-    fastmode: bool = True
-
-
-@dataclass
-class MixedDensityEventStackConf:
-    name: str = MISSING
-    nbins: int = MISSING
-    count_cutoff: Optional[int] = MISSING
-    event_window_extraction: EventWindowExtractionConf = field(default_factory=EventWindowExtractionConf)
-
-
-name_2_structured_config = {
-    'stacked_histogram': StackedHistogramConf,
-    'mixeddensity_stack': MixedDensityEventStackConf,
-}
-
-
 class EventRepresentationFactory(ABC):
     def __init__(self, config: DictConfig):
         self.config = config
@@ -642,37 +648,18 @@ class EventRepresentationFactory(ABC):
         ...
 
 
-class StackedHistogramFactory(EventRepresentationFactory):
+class EventSurfaceFactory(EventRepresentationFactory):
     @property
     def name(self) -> str:
         extraction = self.config.event_window_extraction
-        return f'{self.config.name}_{aggregation_2_string[extraction.method]}={extraction.value}_nbins={self.config.nbins}'
+        return f'{self.config.name}_{aggregation_2_string[extraction.method]}={extraction.value}'
 
-    def create(self, height: int, width: int) -> StackedHistogram:
-        return StackedHistogram(bins=self.config.nbins,
-                                height=height,
-                                width=width,
-                                count_cutoff=self.config.count_cutoff,
-                                fastmode=self.config.fastmode)
-
-
-class MixedDensityStackFactory(EventRepresentationFactory):
-    @property
-    def name(self) -> str:
-        extraction = self.config.event_window_extraction
-        cutoff_str = f'_cutoff={self.config.count_cutoff}' if self.config.count_cutoff is not None else ''
-        return f'{self.config.name}_{aggregation_2_string[extraction.method]}={extraction.value}_nbins={self.config.nbins}{cutoff_str}'
-
-    def create(self, height: int, width: int) -> MixedDensityEventStack:
-        return MixedDensityEventStack(bins=self.config.nbins,
-                                      height=height,
-                                      width=width,
-                                      count_cutoff=self.config.count_cutoff)
+    def create(self, height: int, width: int) -> EventSurface:
+        return EventSurface(height=height, width=width)
 
 
 name_2_ev_repr_factory = {
-    'stacked_histogram': StackedHistogramFactory,
-    'mixeddensity_stack': MixedDensityStackFactory,
+    'event_surface': EventSurfaceFactory,
 }
 
 
@@ -682,8 +669,6 @@ def get_configuration(ev_repr_yaml_config: Path, extraction_yaml_config: Path) -
     event_window_extraction_config = OmegaConf.merge(OmegaConf.structured(EventWindowExtractionConf),
                                                      event_window_extraction_config)
     config.event_window_extraction = event_window_extraction_config
-    config_schema = OmegaConf.structured(name_2_structured_config[config.name])
-    config = OmegaConf.merge(config_schema, config)
     return config
 
 

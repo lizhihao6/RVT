@@ -63,6 +63,6 @@ conf_preprocess/extraction/const_duration.yaml conf_preprocess/filter_gen4.yaml 
 For the Gen1 dataset:
 ```Bash
 NUM_PROCESSES=20  # set to the number of parallel processes to use
-python preprocess_dataset.py ${DATA_DIR} ${DEST_DIR} conf_preprocess/representation/stacked_hist.yaml \
+python preprocess_dataset.py ${DATA_DIR} ${DEST_DIR} conf_preprocess/representation/event_surface.yaml \
 conf_preprocess/extraction/const_duration.yaml conf_preprocess/filter_gen1.yaml -ds gen1 -np ${NUM_PROCESSES}
 ```
