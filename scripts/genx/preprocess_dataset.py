@@ -77,7 +77,7 @@ class H5Writer:
         maxshape = (None, 2)
         chunkshape = (1, 2)
         self.pos_key = 'pos'
-        self.pos_dtype = np.uint8
+        self.pos_dtype = np.uint16
         self.h5f.create_dataset(self.pos_key, dtype=self.pos_dtype,
                                 shape=chunkshape, chunks=chunkshape,
                                 maxshape=maxshape)
@@ -141,11 +141,11 @@ class H5Writer:
         self.h5f[self.events_key].resize(new_size, axis=0)
         self.h5f[self.events_key][self.t_idx:new_size] = events
 
-        num_data = self.h5f[self.indices_key].shape[0]
-        self.h5f[self.indices_key].resize(num_data+1, axis=0)
-        self.h5f[self.indices_key][num_data] = [frame_idx, self.t_idx, new_size]
+        self.h5f[self.indices_key].resize(self.counter+1, axis=0)
+        self.h5f[self.indices_key][self.counter] = [frame_idx, self.t_idx, new_size]
 
         self.t_idx = new_size
+        self.counter += 1
 
 
 class H5Reader:
@@ -543,13 +543,18 @@ def write_event_representations(in_h5_file: Path,
             ev_window = h5_reader.get_event_slice(idx_start=idx_start, idx_end=idx_end)
             
             # sometimes there are no events in the window
-            if ev_window['x'].shape[0] < 2**5:
+            if ev_window['x'].shape[0] == 0:
                 continue
 
             ev_repr = event_representation.construct(x=ev_window['x'],
                                                      y=ev_window['y'],
                                                      pol=ev_window['p'],
                                                      time=ev_window['t'])
+
+            # sometimes there are no events in the window
+            if ev_repr.shape[0] < 2**5:
+                continue
+
             if downsample_by_2:
                 raise NotImplementedError
             else:

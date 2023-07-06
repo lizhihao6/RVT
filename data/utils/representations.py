@@ -16,7 +16,7 @@ class RepresentationBase(ABC):
 
 class EventSurface(RepresentationBase):
     def __init__(self, height: int, width: int):
-        self.sparse_to_dence = scn.Sequential(
+        self.sparse_to_dense = scn.Sequential(
             scn.InputLayer(2, (height, width), mode=1),
             scn.SparseToDense(2, 4)
         )
@@ -41,7 +41,7 @@ class EventSurface(RepresentationBase):
         yxb = th.stack((y, x, th.zeros_like(x)), dim=1)
         xytp = th.stack((x, y, t_norm, pol), dim=1)
         
-        dense = self.sparse_to_dence((yxb, xytp.float()))
+        dense = self.sparse_to_dense((yxb, xytp.float()))
         assert len(dense.shape) == 4
         dense = dense[0].permute([1, 2, 0]) # [H, W, C]
         sparse = dense.to_sparse(2)
