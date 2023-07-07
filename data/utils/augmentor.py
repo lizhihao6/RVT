@@ -157,7 +157,7 @@ class RandomSpatialAugmentorGenX:
         assert len(zoom_coordinates_x0y0) == 2
         assert isinstance(input_, th.Tensor)
 
-        if datatype == DataType.IMAGE or datatype == DataType.EV_REPR:
+        if datatype == DataType.IMAGE:
             assert input_.ndim == 3, f'{input_.shape=}'
             height, width = input_.shape[-2:]
             zoom_window_h, zoom_window_w = int(height / zoom_out_factor), int(
@@ -173,6 +173,15 @@ class RandomSpatialAugmentorGenX:
             output[:, y0:y0 + zoom_window_h,
                    x0:x0 + zoom_window_w] = zoom_window
             return output
+        if datatype == DataType.EV_REPR:
+            assert input_.ndim == 2, f'{input_.shape=}'
+            x0, y0 = zoom_coordinates_x0y0
+            assert x0 >= 0
+            assert y0 >= 0
+            input_[:, 0] = input_[:, 0] / zoom_out_factor + x0
+            input_[:, 1] = input_[:, 1] / zoom_out_factor + y0
+            input_ = th.clamp(input_, 0, 1)
+            return input_
         raise NotImplementedError
 
     @classmethod
@@ -213,9 +222,7 @@ class RandomSpatialAugmentorGenX:
         if rand_zoom_in_factor == 1:
             return data_dict
 
-        height, width = RandomSpatialAugmentorGenX._hw_from_data(
-            data_dict=data_dict)
-        assert (height, width) == self.hw_tuple
+        height, width = self.hw_tuple
         zoom_window_h, zoom_window_w = int(height / rand_zoom_in_factor), int(
             width / rand_zoom_in_factor)
         latest_objframe = get_most_recent_objframe(data_dict=data_dict,
@@ -240,7 +247,7 @@ class RandomSpatialAugmentorGenX:
         assert len(zoom_coordinates_x0y0) == 2
         assert isinstance(input_, th.Tensor)
 
-        if datatype == DataType.IMAGE or datatype == DataType.EV_REPR:
+        if datatype == DataType.IMAGE:
             assert input_.ndim == 3, f'{input_.shape=}'
             height, width = input_.shape[-2:]
             zoom_window_h, zoom_window_w = int(height / zoom_in_factor), int(
@@ -256,6 +263,15 @@ class RandomSpatialAugmentorGenX:
                                  mode='nearest-exact')
             output = output[0]
             return output
+        if datatype == DataType.EV_REPR:
+            assert input_.ndim == 2, f'{input_.shape=}'
+            x0, y0 = zoom_coordinates_x0y0
+            assert x0 >= 0
+            assert y0 >= 0
+            input_[:, 0] = (input_[:, 0] - x0) * zoom_in_factor
+            input_[:, 1] = (input_[:, 1] - y0) * zoom_in_factor
+            input_ = th.clamp(input_, 0, 1)
+            return input_
         raise NotImplementedError
 
     @classmethod
@@ -401,28 +417,6 @@ class RandomSpatialAugmentorGenX:
                     for key, value in input_.items()}
         raise NotImplementedError
 
-    @staticmethod
-    def _hw_from_data(data_dict: LoaderDataDictGenX) -> Tuple[int, int]:
-        height = None
-        width = None
-        for k, v in data_dict.items():
-            _hw = None
-            if k == DataType.OBJLABELS or k == DataType.OBJLABELS_SEQ:
-                hw = v.input_size_hw
-                if hw is not None:
-                    _hw = v.input_size_hw
-            elif k in (DataType.IMAGE, DataType.FLOW, DataType.EV_REPR):
-                _hw = v[0].shape[-2:]
-            if _hw is not None:
-                _height, _width = _hw
-                if height is None:
-                    assert width is None
-                    height, width = _height, _width
-                else:
-                    assert height == _height and width == _width
-        assert height is not None
-        assert width is not None
-        return height, width
 
     def __call__(self, data_dict: LoaderDataDictGenX):
         """
