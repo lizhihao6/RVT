@@ -2,7 +2,7 @@ defaults:
   - base
 
 name: gen1
-ev_repr_name: 'stacked_histogram_dt=50_nbins=10'
+ev_repr_name: 'event_surface_dt=50'
 sequence_length: 11
 resolution_hw: [240, 304]
 downsample_by_factor_2: False

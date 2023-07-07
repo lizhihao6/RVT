@@ -125,7 +125,7 @@ class H5Writer:
     def close(self):
         self.h5f.close()
 
-    def add_data(self, xytp: np.ndarray, frame_idx: int):
+    def add_data(self, xytp: np.ndarray, seq_idx: int):
         pos = xytp[:, :2].astype(self.pos_dtype)
         time = xytp[:, 2].astype(self.time_dtype)
         events = xytp[:, 3].astype(self.events_dtype)
@@ -142,7 +142,7 @@ class H5Writer:
         self.h5f[self.events_key][self.t_idx:new_size] = events
 
         self.h5f[self.indices_key].resize(self.counter+1, axis=0)
-        self.h5f[self.indices_key][self.counter] = [frame_idx, self.t_idx, new_size]
+        self.h5f[self.indices_key][self.counter] = [seq_idx, self.t_idx, new_size]
 
         self.t_idx = new_size
         self.counter += 1
@@ -340,16 +340,21 @@ def get_base_delta_ts_for_labels_us(unique_label_ts_us: np.ndarray, dataset_type
 def save_labels(out_labels_dir: Path,
                 labels_per_frame: List[np.ndarray],
                 frame_timestamps_us: np.ndarray,
+                paired_frame_mask: np.ndarray,
                 match_if_exists: bool = True) -> None:
     assert len(labels_per_frame) == len(frame_timestamps_us)
     assert len(labels_per_frame) > 0
     labels_v2 = list()
     objframe_idx_2_label_idx = list()
     start_idx = 0
-    for labels, timestamp in zip(labels_per_frame, frame_timestamps_us):
-        objframe_idx_2_label_idx.append(start_idx)
-        labels_v2.append(labels)
-        start_idx += len(labels)
+    _frame_timestamps_us = list()
+    for frame_idx, (labels, timestamp) in enumerate(zip(labels_per_frame, frame_timestamps_us)):
+        if paired_frame_mask[frame_idx] > 0:
+            objframe_idx_2_label_idx.append(start_idx)
+            labels_v2.append(labels)
+            start_idx += len(labels)
+            _frame_timestamps_us.append(timestamp)
+    frame_timestamps_us = np.asarray(_frame_timestamps_us, dtype=frame_timestamps_us.dtype)
     assert len(labels_v2) == len(objframe_idx_2_label_idx)
     labels_v2 = np.concatenate(labels_v2)
 
@@ -405,7 +410,7 @@ def labels_and_ev_repr_timestamps(npy_file: Path,
     unique_ts_idx_first = np.searchsorted(unique_ts_us, align_t_us, side='left')
 
     # Extract "frame" timestamps from labels and prepare ev repr ts computation
-    num_ev_reprs_between_frame_ts = []
+    num_ev_reprs_between_frame_ts = list()
     frame_timestamps_us = [unique_ts_us[unique_ts_idx_first]]
     for unique_ts_idx in range(unique_ts_idx_first + 1, len(unique_ts_us)):
         reference_time = frame_timestamps_us[-1]
@@ -425,7 +430,7 @@ def labels_and_ev_repr_timestamps(npy_file: Path,
     end_indices_per_label = np.searchsorted(sequence_labels['t'], frame_timestamps_us, side='right')
 
     # Create labels per "frame"
-    labels_per_frame = []
+    labels_per_frame = list()
     for idx_start, idx_end in zip(start_indices_per_label, end_indices_per_label):
         labels = sequence_labels[idx_start:idx_end]
         label_time_us = labels['t'][0]
@@ -474,28 +479,42 @@ def write_event_data(in_h5_file: Path,
                      ev_repr_delta_ts_ms: Optional[int],
                      ev_repr_timestamps_us: np.ndarray,
                      downsample_by_2: bool,
-                     frameidx2repridx: np.ndarray) -> None:
+                     frameidx2repridx: np.ndarray) -> np.ndarray:
+    _frameidx2repridx = write_event_representations(in_h5_file=in_h5_file,
+                                                    ev_out_dir=ev_out_dir,
+                                                    dataset=dataset,
+                                                    event_representation=event_representation,
+                                                    ev_repr_num_events=ev_repr_num_events,
+                                                    ev_repr_delta_ts_ms=ev_repr_delta_ts_ms,
+                                                    ev_repr_timestamps_us=ev_repr_timestamps_us,
+                                                    frameidx2repridx=frameidx2repridx,
+                                                    downsample_by_2=downsample_by_2,
+                                                    overwrite_if_exists=False)
+
+    # regenerate frameidx2repridx
+    frameidx2repridx = _frameidx2repridx[_frameidx2repridx > 0]
+    frameidx2repridx = np.cumsum(frameidx2repridx)
+
+    # save frameidx2repridx
     frameidx2repridx_file = ev_out_dir / 'objframe_idx_2_repr_idx.npy'
     if frameidx2repridx_file.exists():
         frameidx2repridx_loaded = np.load(str(frameidx2repridx_file))
         assert np.array_equal(frameidx2repridx_loaded, frameidx2repridx)
     else:
         np.save(str(frameidx2repridx_file), frameidx2repridx)
+
+    # save timestamps
     timestamps_file = ev_out_dir / 'timestamps_us.npy'
     if timestamps_file.exists():
         timestamps_loaded = np.load(str(timestamps_file))
         assert np.array_equal(timestamps_loaded, ev_repr_timestamps_us)
     else:
         np.save(str(timestamps_file), ev_repr_timestamps_us)
-    write_event_representations(in_h5_file=in_h5_file,
-                                ev_out_dir=ev_out_dir,
-                                dataset=dataset,
-                                event_representation=event_representation,
-                                ev_repr_num_events=ev_repr_num_events,
-                                ev_repr_delta_ts_ms=ev_repr_delta_ts_ms,
-                                ev_repr_timestamps_us=ev_repr_timestamps_us,
-                                downsample_by_2=downsample_by_2,
-                                overwrite_if_exists=False)
+
+    # generate paired_frame_mask for saving labels
+    paired_frame_mask = np.where(_frameidx2repridx > 0, 1, 0)
+
+    return paired_frame_mask
 
 
 def downsample_ev_repr(x: torch.Tensor, scale_factor: float):
@@ -518,8 +537,9 @@ def write_event_representations(in_h5_file: Path,
                                 ev_repr_num_events: Optional[int],
                                 ev_repr_delta_ts_ms: Optional[int],
                                 ev_repr_timestamps_us: np.ndarray,
+                                frameidx2repridx: np.ndarray,
                                 downsample_by_2: bool,
-                                overwrite_if_exists: bool = False) -> None:
+                                overwrite_if_exists: bool = False) -> np.ndarray:
     ev_outfile = ev_out_dir / f"event_representations{'_ds2_nearest' if downsample_by_2 else ''}.h5"
     if ev_outfile.exists() and not overwrite_if_exists:
         return
@@ -539,9 +559,10 @@ def write_event_representations(in_h5_file: Path,
             assert ev_repr_delta_ts_ms is not None
             start_indices = np.searchsorted(ev_ts_us, ev_repr_timestamps_us - ev_repr_delta_ts_ms * 1000, side='left')
 
-        for i, (idx_start, idx_end) in enumerate(zip(start_indices, end_indices)):
+        _frameidx2repridx = np.zeros_like(frameidx2repridx)
+        for seq_idx, (idx_start, idx_end) in enumerate(zip(start_indices, end_indices)):
             ev_window = h5_reader.get_event_slice(idx_start=idx_start, idx_end=idx_end)
-            
+
             # sometimes there are no events in the window
             if ev_window['x'].shape[0] == 0:
                 continue
@@ -559,9 +580,12 @@ def write_event_representations(in_h5_file: Path,
                 raise NotImplementedError
             else:
                 ev_repr_numpy = ev_repr.numpy()
-            h5_writer.add_data(ev_repr_numpy, i)
-    assert i == len(ev_repr_timestamps_us)-1
+            h5_writer.add_data(ev_repr_numpy, seq_idx)
+            frame_idx = np.searchsorted(frameidx2repridx, seq_idx, side='left')
+            _frameidx2repridx[frame_idx] += 1
+    assert seq_idx == len(ev_repr_timestamps_us)-1
     os.rename(ev_outfile_in_progress, ev_outfile)
+    return _frameidx2repridx
 
 
 def process_sequence(dataset: str,
@@ -599,22 +623,22 @@ def process_sequence(dataset: str,
         shutil.rmtree(parent_dir)
         return
 
-    # 2) save: labels_per_frame, frame_timestamps_us
+    # 2) retrieve event data, compute event representations and save them
+    paired_frame_mask = write_event_data(in_h5_file=in_h5_file,
+                                         ev_out_dir=out_ev_repr_dir,
+                                         dataset=dataset,
+                                         event_representation=event_representation,
+                                         ev_repr_num_events=ev_repr_num_events,
+                                         ev_repr_delta_ts_ms=ev_repr_delta_ts_ms,
+                                         ev_repr_timestamps_us=ev_repr_timestamps_us,
+                                         downsample_by_2=downsample_by_2,
+                                         frameidx2repridx=frameidx2repridx)
+
+    # 3) clean and save labels: labels_per_frame, frame_timestamps_us
     save_labels(out_labels_dir=out_labels_dir,
                 labels_per_frame=labels_per_frame,
+                paired_frame_mask=paired_frame_mask,
                 frame_timestamps_us=frame_timestamps_us)
-
-    # 3) retrieve event data, compute event representations and save them
-    write_event_data(in_h5_file=in_h5_file,
-                     ev_out_dir=out_ev_repr_dir,
-                     dataset=dataset,
-                     event_representation=event_representation,
-                     ev_repr_num_events=ev_repr_num_events,
-                     ev_repr_delta_ts_ms=ev_repr_delta_ts_ms,
-                     ev_repr_timestamps_us=ev_repr_timestamps_us,
-                     downsample_by_2=downsample_by_2,
-                     frameidx2repridx=frameidx2repridx)
-
 
 class AggregationType(Enum):
     COUNT = auto()

@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Any, List, Optional
+from typing import Any, List, Optional, Tuple
 
 import h5py
 import numpy as np
@@ -74,9 +74,6 @@ class SequenceBase(MapDataPipe):
                 downsample_factor=2 if downsample_by_factor_2 else None)
             self.label_factory = label_factory
 
-        with Timer(timer_name='load objframe_idx_2_repr_idx'):
-            self.objframe_idx_2_repr_idx = get_objframe_idx_2_repr_idx(
-                path=path, ev_representation_name=ev_representation_name)
         with Timer(timer_name='construct repr_idx_2_objframe_idx'):
             self.repr_idx_2_objframe_idx = dict(zip(self.objframe_idx_2_repr_idx,
                                                     range(len(self.objframe_idx_2_repr_idx))))

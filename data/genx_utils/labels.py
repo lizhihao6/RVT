@@ -160,6 +160,7 @@ class ObjectLabelFactory(ObjectLabelBase):
         self.downsample_factor = downsample_factor
         if self.downsample_factor is not None:
             assert self.downsample_factor > 1
+            raise NotImplementedError
         self.clamp_to_frame_()
 
     @staticmethod

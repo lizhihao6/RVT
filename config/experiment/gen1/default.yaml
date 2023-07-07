@@ -33,7 +33,7 @@ dataset:
       w_random: 1
   eval:
     sampling: 'stream'
-  ev_repr_name: 'stacked_histogram_dt=50_nbins=10'
+  ev_repr_name: 'event_surface_dt=50'
   sequence_length: 21
   downsample_by_factor_2: False
   only_load_end_labels: False
