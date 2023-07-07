@@ -14,6 +14,7 @@ from loggers.wandb_logger import WandbLogger
 
 
 class VizCallbackBase(Callback):
+
     def __init__(self, config: DictConfig, buffer_entries: Type[Enum]):
         super().__init__()
 
@@ -48,33 +49,27 @@ class VizCallbackBase(Callback):
 
     # Functions to be IMPLEMENTED in the base class --------------------------------------------------------------------
 
-    def on_train_batch_end_custom(self,
-                                  logger: WandbLogger,
-                                  outputs: Any,
-                                  batch: Any,
-                                  log_n_samples: int,
+    def on_train_batch_end_custom(self, logger: WandbLogger, outputs: Any,
+                                  batch: Any, log_n_samples: int,
                                   global_step: int) -> None:
         raise NotImplementedError
 
-    def on_validation_batch_end_custom(self,
-                                       batch: Any,
-                                       outputs: Any) -> None:
+    def on_validation_batch_end_custom(self, batch: Any, outputs: Any) -> None:
         raise NotImplementedError
 
-    def on_validation_epoch_end_custom(self,
-                                       logger: WandbLogger) -> None:
+    def on_validation_epoch_end_custom(self, logger: WandbLogger) -> None:
         raise NotImplementedError
 
     # ------------------------------------------------------------------------------------------------------------------
 
     def on_train_batch_end(
-            self,
-            trainer: pl.Trainer,
-            pl_module: pl.LightningModule,
-            outputs: Any,
-            batch: Any,
-            batch_idx: int,
-            unused: int = 0,
+        self,
+        trainer: pl.Trainer,
+        pl_module: pl.LightningModule,
+        outputs: Any,
+        batch: Any,
+        batch_idx: int,
+        unused: int = 0,
     ) -> None:
         log_train_hd = self.log_config.train.high_dim
         if not log_train_hd.enable:
@@ -92,22 +87,21 @@ class VizCallbackBase(Callback):
 
         global_step = trainer.global_step
 
-        self.on_train_batch_end_custom(
-            logger=logger,
-            outputs=outputs,
-            batch=batch,
-            log_n_samples=n_samples,
-            global_step=global_step)
+        self.on_train_batch_end_custom(logger=logger,
+                                       outputs=outputs,
+                                       batch=batch,
+                                       log_n_samples=n_samples,
+                                       global_step=global_step)
 
     @rank_zero_only
     def on_validation_batch_end(
-            self,
-            trainer: pl.Trainer,
-            pl_module: pl.LightningModule,
-            outputs: Optional[Any],
-            batch: Any,
-            batch_idx: int,
-            dataloader_idx: int,
+        self,
+        trainer: pl.Trainer,
+        pl_module: pl.LightningModule,
+        outputs: Optional[Any],
+        batch: Any,
+        batch_idx: int,
+        dataloader_idx: int,
     ) -> None:
         log_val_hd = self.log_config.validation.high_dim
         log_freq_val_epochs = log_val_hd.every_n_epochs
@@ -130,11 +124,13 @@ class VizCallbackBase(Callback):
 
         self.on_validation_batch_end_custom(batch, outputs)
 
-    def on_validation_epoch_start(self, trainer: pl.Trainer, pl_module: pl.LightningModule) -> None:
+    def on_validation_epoch_start(self, trainer: pl.Trainer,
+                                  pl_module: pl.LightningModule) -> None:
         self._reset_buffer()
 
     @rank_zero_only
-    def on_validation_epoch_end(self, trainer: pl.Trainer, pl_module: pl.LightningModule) -> None:
+    def on_validation_epoch_end(self, trainer: pl.Trainer,
+                                pl_module: pl.LightningModule) -> None:
         log_val_hd = self.log_config.validation.high_dim
         log_n_samples = log_val_hd.n_samples
         log_freq_val_epochs = log_val_hd.every_n_epochs
@@ -144,7 +140,8 @@ class VizCallbackBase(Callback):
             random.seed(0)
             num_samples = min(len(self._val_batch_indices), log_n_samples)
             # draw without replacement
-            sampled_indices = random.sample(self._val_batch_indices, num_samples)
+            sampled_indices = random.sample(self._val_batch_indices,
+                                            num_samples)
             self._val_batch_indices = sampled_indices
             self._selected_val_batches = True
             return
@@ -155,18 +152,24 @@ class VizCallbackBase(Callback):
         assert isinstance(logger, WandbLogger)
         self.on_validation_epoch_end_custom(logger)
 
-    def on_train_batch_start(
-            self, trainer: "pl.Trainer", pl_module: "pl.LightningModule", batch: Any, batch_idx: int
-    ) -> None:
+    def on_train_batch_start(self, trainer: 'pl.Trainer',
+                             pl_module: 'pl.LightningModule', batch: Any,
+                             batch_idx: int) -> None:
         self._training_has_started = True
 
     @staticmethod
     def ev_repr_to_img(x: np.ndarray):
         ch, ht, wd = x.shape[-3:]
         assert ch > 1 and ch % 2 == 0
-        ev_repr_reshaped = rearrange(x, '(posneg C) H W -> posneg C H W', posneg=2)
-        img_neg = np.asarray(reduce(ev_repr_reshaped[0], 'C H W -> H W', 'sum'), dtype='int32')
-        img_pos = np.asarray(reduce(ev_repr_reshaped[1], 'C H W -> H W', 'sum'), dtype='int32')
+        ev_repr_reshaped = rearrange(x,
+                                     '(posneg C) H W -> posneg C H W',
+                                     posneg=2)
+        img_neg = np.asarray(reduce(ev_repr_reshaped[0], 'C H W -> H W',
+                                    'sum'),
+                             dtype='int32')
+        img_pos = np.asarray(reduce(ev_repr_reshaped[1], 'C H W -> H W',
+                                    'sum'),
+                             dtype='int32')
         img_diff = img_pos - img_neg
         img = 127 * np.ones((ht, wd, 3), dtype=np.uint8)
         img[img_diff > 0] = 255

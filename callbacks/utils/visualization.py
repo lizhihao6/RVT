@@ -3,7 +3,9 @@ import plotly.express as px
 
 
 def get_grad_flow_figure(named_params):
-    """Creates figure to visualize gradients flowing through different layers in the net during training.
+    """Creates figure to visualize gradients flowing through different layers
+    in the net during training.
+
     Can be used for checking for possible gradient vanishing / exploding problems.
     Usage: Use this function after loss.backwards()
     """

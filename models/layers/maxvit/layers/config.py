@@ -1,10 +1,9 @@
-""" Model / Layer Config singleton state
-"""
+"""Model / Layer Config singleton state."""
 from typing import Any, Optional
 
 __all__ = [
-    'is_exportable', 'is_scriptable', 'is_no_jit',
-    'set_exportable', 'set_scriptable', 'set_no_jit', 'set_layer_config'
+    'is_exportable', 'is_scriptable', 'is_no_jit', 'set_exportable',
+    'set_scriptable', 'set_no_jit', 'set_layer_config'
 ]
 
 # Set to True if prefer to have layers with no jit optimization (includes activations)
@@ -27,6 +26,7 @@ def is_no_jit():
 
 
 class set_no_jit:
+
     def __init__(self, mode: bool) -> None:
         global _NO_JIT
         self.prev = _NO_JIT
@@ -46,6 +46,7 @@ def is_exportable():
 
 
 class set_exportable:
+
     def __init__(self, mode: bool) -> None:
         global _EXPORTABLE
         self.prev = _EXPORTABLE
@@ -65,6 +66,7 @@ def is_scriptable():
 
 
 class set_scriptable:
+
     def __init__(self, mode: bool) -> None:
         global _SCRIPTABLE
         self.prev = _SCRIPTABLE
@@ -80,15 +82,17 @@ class set_scriptable:
 
 
 class set_layer_config:
-    """ Layer config context manager that allows setting all layer config flags at once.
+    """Layer config context manager that allows setting all layer config flags
+    at once.
+
     If a flag arg is None, it will not change the current value.
     """
-    def __init__(
-            self,
-            scriptable: Optional[bool] = None,
-            exportable: Optional[bool] = None,
-            no_jit: Optional[bool] = None,
-            no_activation_jit: Optional[bool] = None):
+
+    def __init__(self,
+                 scriptable: Optional[bool] = None,
+                 exportable: Optional[bool] = None,
+                 no_jit: Optional[bool] = None,
+                 no_activation_jit: Optional[bool] = None):
         global _SCRIPTABLE
         global _EXPORTABLE
         global _NO_JIT

@@ -1,11 +1,11 @@
 import os
 
 os.environ['CUDA_DEVICE_ORDER'] = 'PCI_BUS_ID'
-os.environ["OMP_NUM_THREADS"] = "1"
-os.environ["OPENBLAS_NUM_THREADS"] = "1"
-os.environ["MKL_NUM_THREADS"] = "1"
-os.environ["VECLIB_MAXIMUM_THREADS"] = "1"
-os.environ["NUMEXPR_NUM_THREADS"] = "1"
+os.environ['OMP_NUM_THREADS'] = '1'
+os.environ['OPENBLAS_NUM_THREADS'] = '1'
+os.environ['MKL_NUM_THREADS'] = '1'
+os.environ['VECLIB_MAXIMUM_THREADS'] = '1'
+os.environ['NUMEXPR_NUM_THREADS'] = '1'
 
 import torch
 
@@ -16,8 +16,8 @@ cuda.matmul.allow_tf32 = True
 cudnn.allow_tf32 = True
 
 import hydra
-from omegaconf import DictConfig, OmegaConf
 import pytorch_lightning as pl
+from omegaconf import DictConfig, OmegaConf
 from pytorch_lightning.callbacks import LearningRateMonitor, ModelSummary
 from pytorch_lightning.strategies import DDPStrategy
 
@@ -25,7 +25,7 @@ from callbacks.custom import get_ckpt_callback, get_viz_callback
 from callbacks.gradflow import GradFlowLogCallback
 from config.modifier import dynamically_modify_train_config
 from data.utils.types import DatasetSamplingMode
-from loggers.utils import get_wandb_logger, get_ckpt_path
+from loggers.utils import get_ckpt_path, get_wandb_logger
 from modules.utils.fetch import fetch_data_module, fetch_model_module
 
 
@@ -44,10 +44,12 @@ def main(config: DictConfig):
     # ---------------------
     dataset_train_sampling = config.dataset.train.sampling
     assert dataset_train_sampling in iter(DatasetSamplingMode)
-    disable_seed_everything = dataset_train_sampling in (DatasetSamplingMode.STREAM, DatasetSamplingMode.MIXED)
+    disable_seed_everything = dataset_train_sampling in (
+        DatasetSamplingMode.STREAM, DatasetSamplingMode.MIXED)
     if disable_seed_everything:
-        print('Disabling PL seed everything because of unresolved issues with shuffling during training on streaming '
-              'datasets')
+        print(
+            'Disabling PL seed everything because of unresolved issues with shuffling during training on streaming '
+            'datasets')
     seed = config.reproduce.seed_everything
     if seed is not None and not disable_seed_everything:
         assert isinstance(seed, int)
@@ -58,13 +60,15 @@ def main(config: DictConfig):
     # DDP
     # ---------------------
     gpu_config = config.hardware.gpus
-    gpus = OmegaConf.to_container(gpu_config) if OmegaConf.is_config(gpu_config) else gpu_config
+    gpus = OmegaConf.to_container(gpu_config) if OmegaConf.is_config(
+        gpu_config) else gpu_config
     gpus = gpus if isinstance(gpus, list) else [gpus]
     distributed_backend = config.hardware.dist_backend
     assert distributed_backend in ('nccl', 'gloo'), f'{distributed_backend=}'
-    strategy = DDPStrategy(process_group_backend=distributed_backend,
-                           find_unused_parameters=False,
-                           gradient_as_bucket_view=True) if len(gpus) > 1 else None
+    strategy = DDPStrategy(
+        process_group_backend=distributed_backend,
+        find_unused_parameters=False,
+        gradient_as_bucket_view=True) if len(gpus) > 1 else None
 
     # ---------------------
     # Data
@@ -85,7 +89,8 @@ def main(config: DictConfig):
     module = fetch_model_module(config=config)
     if ckpt_path is not None and config.wandb.resume_only_weights:
         print('Resuming only the weights instead of the full training state')
-        module = module.load_from_checkpoint(str(ckpt_path), **{'full_config': config})
+        module = module.load_from_checkpoint(str(ckpt_path),
+                                             **{'full_config': config})
         ckpt_path = None
 
     # ---------------------
@@ -93,7 +98,8 @@ def main(config: DictConfig):
     # ---------------------
     callbacks = list()
     callbacks.append(get_ckpt_callback(config))
-    callbacks.append(GradFlowLogCallback(config.logging.train.log_model_every_n_steps))
+    callbacks.append(
+        GradFlowLogCallback(config.logging.train.log_model_every_n_steps))
     if config.training.lr_scheduler.use:
         callbacks.append(LearningRateMonitor(logging_interval='step'))
     if config.logging.train.high_dim.enable or config.logging.validation.high_dim.enable:
@@ -101,7 +107,10 @@ def main(config: DictConfig):
         callbacks.append(viz_callback)
     callbacks.append(ModelSummary(max_depth=2))
 
-    logger.watch(model=module, log='all', log_freq=config.logging.train.log_model_every_n_steps, log_graph=True)
+    logger.watch(model=module,
+                 log='all',
+                 log_freq=config.logging.train.log_model_every_n_steps,
+                 log_graph=True)
 
     # ---------------------
     # Training

@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-# -*- encoding: utf-8 -*-
 # Copyright (c) Megvii Inc. All rights reserved.
 
 import torch
@@ -14,24 +13,29 @@ class SiLU(nn.Module):
         return x * torch.sigmoid(x)
 
 
-def get_activation(name="silu", inplace=True):
-    if name == "silu":
+def get_activation(name='silu', inplace=True):
+    if name == 'silu':
         module = nn.SiLU(inplace=inplace)
-    elif name == "relu":
+    elif name == 'relu':
         module = nn.ReLU(inplace=inplace)
-    elif name == "lrelu":
+    elif name == 'lrelu':
         module = nn.LeakyReLU(0.1, inplace=inplace)
     else:
-        raise AttributeError("Unsupported act type: {}".format(name))
+        raise AttributeError('Unsupported act type: {}'.format(name))
     return module
 
 
 class BaseConv(nn.Module):
-    """A Conv2d -> Batchnorm -> silu/leaky relu block"""
+    """A Conv2d -> Batchnorm -> silu/leaky relu block."""
 
-    def __init__(
-        self, in_channels, out_channels, ksize, stride, groups=1, bias=False, act="silu"
-    ):
+    def __init__(self,
+                 in_channels,
+                 out_channels,
+                 ksize,
+                 stride,
+                 groups=1,
+                 bias=False,
+                 act='silu'):
         super().__init__()
         # same padding
         pad = (ksize - 1) // 2
@@ -55,9 +59,9 @@ class BaseConv(nn.Module):
 
 
 class DWConv(nn.Module):
-    """Depthwise Conv + Conv"""
+    """Depthwise Conv + Conv."""
 
-    def __init__(self, in_channels, out_channels, ksize, stride=1, act="silu"):
+    def __init__(self, in_channels, out_channels, ksize, stride=1, act='silu'):
         super().__init__()
         self.dconv = BaseConv(
             in_channels,
@@ -67,9 +71,12 @@ class DWConv(nn.Module):
             groups=in_channels,
             act=act,
         )
-        self.pconv = BaseConv(
-            in_channels, out_channels, ksize=1, stride=1, groups=1, act=act
-        )
+        self.pconv = BaseConv(in_channels,
+                              out_channels,
+                              ksize=1,
+                              stride=1,
+                              groups=1,
+                              act=act)
 
     def forward(self, x):
         x = self.dconv(x)
@@ -85,12 +92,16 @@ class Bottleneck(nn.Module):
         shortcut=True,
         expansion=0.5,
         depthwise=False,
-        act="silu",
+        act='silu',
     ):
         super().__init__()
         hidden_channels = int(out_channels * expansion)
         Conv = DWConv if depthwise else BaseConv
-        self.conv1 = BaseConv(in_channels, hidden_channels, 1, stride=1, act=act)
+        self.conv1 = BaseConv(in_channels,
+                              hidden_channels,
+                              1,
+                              stride=1,
+                              act=act)
         self.conv2 = Conv(hidden_channels, out_channels, 3, stride=1, act=act)
         self.use_add = shortcut and in_channels == out_channels
 
@@ -102,7 +113,7 @@ class Bottleneck(nn.Module):
 
 
 class CSPLayer(nn.Module):
-    """C3 in yolov5, CSP Bottleneck with 3 convolutions"""
+    """C3 in yolov5, CSP Bottleneck with 3 convolutions."""
 
     def __init__(
         self,
@@ -112,7 +123,7 @@ class CSPLayer(nn.Module):
         shortcut=True,
         expansion=0.5,
         depthwise=False,
-        act="silu",
+        act='silu',
     ):
         """
         Args:
@@ -123,14 +134,28 @@ class CSPLayer(nn.Module):
         # ch_in, ch_out, number, shortcut, groups, expansion
         super().__init__()
         hidden_channels = int(out_channels * expansion)  # hidden channels
-        self.conv1 = BaseConv(in_channels, hidden_channels, 1, stride=1, act=act)
-        self.conv2 = BaseConv(in_channels, hidden_channels, 1, stride=1, act=act)
-        self.conv3 = BaseConv(2 * hidden_channels, out_channels, 1, stride=1, act=act)
+        self.conv1 = BaseConv(in_channels,
+                              hidden_channels,
+                              1,
+                              stride=1,
+                              act=act)
+        self.conv2 = BaseConv(in_channels,
+                              hidden_channels,
+                              1,
+                              stride=1,
+                              act=act)
+        self.conv3 = BaseConv(2 * hidden_channels,
+                              out_channels,
+                              1,
+                              stride=1,
+                              act=act)
         module_list = [
-            Bottleneck(
-                hidden_channels, hidden_channels, shortcut, 1.0, depthwise, act=act
-            )
-            for _ in range(n)
+            Bottleneck(hidden_channels,
+                       hidden_channels,
+                       shortcut,
+                       1.0,
+                       depthwise,
+                       act=act) for _ in range(n)
         ]
         self.m = nn.Sequential(*module_list)
 

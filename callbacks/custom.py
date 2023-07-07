@@ -1,6 +1,5 @@
 from omegaconf import DictConfig
-from pytorch_lightning.callbacks import Callback
-from pytorch_lightning.callbacks import ModelCheckpoint
+from pytorch_lightning.callbacks import Callback, ModelCheckpoint
 
 from callbacks.detection import DetectionVizCallback
 
@@ -21,7 +20,8 @@ def get_ckpt_callback(config: DictConfig) -> ModelCheckpoint:
     cktp_callback = ModelCheckpoint(
         monitor=ckpt_callback_monitor,
         filename=ckpt_filename,
-        auto_insert_metric_name=False,  # because backslash would create a directory
+        # because backslash would create a directory
+        auto_insert_metric_name=False,
         save_top_k=1,
         mode=mode,
         every_n_epochs=config.logging.ckpt_every_n_epochs,

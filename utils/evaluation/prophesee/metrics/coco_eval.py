@@ -1,11 +1,8 @@
-"""
-Compute the COCO metric on bounding box files by matching timestamps
+"""Compute the COCO metric on bounding box files by matching timestamps.
 
 Copyright: (c) 2019-2020 Prophesee
 """
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
+from __future__ import absolute_import, division, print_function
 
 import contextlib
 import os
@@ -19,16 +16,21 @@ try:
 except ImportError:
     coco_eval_type = 'python-based'
     from pycocotools.cocoeval import COCOeval
+
 print(f'Using {coco_eval_type} detection evaluation')
 
 
-def evaluate_detection(gt_boxes_list, dt_boxes_list, classes=("car", "pedestrian"), height=240, width=304,
-                       time_tol=50000, return_aps: bool = True):
-    """
-    Compute detection KPIs on list of boxes in the numpy format, using the COCO python API
-    https://github.com/cocodataset/cocoapi
-    KPIs are only computed on timestamps where there is actual at least one box
-    (fully empty frames are not considered)
+def evaluate_detection(gt_boxes_list,
+                       dt_boxes_list,
+                       classes=('car', 'pedestrian'),
+                       height=240,
+                       width=304,
+                       time_tol=50000,
+                       return_aps: bool = True):
+    """Compute detection KPIs on list of boxes in the numpy format, using the
+    COCO python API https://github.com/cocodataset/cocoapi KPIs are only
+    computed on timestamps where there is actual at least one box (fully empty
+    frames are not considered)
 
     :param gt_boxes_list: list of numpy array for GT boxes (one per file)
     :param dt_boxes_list: list of numpy array for detected boxes
@@ -49,14 +51,17 @@ def evaluate_detection(gt_boxes_list, dt_boxes_list, classes=("car", "pedestrian
         gt_win, dt_win = _match_times(all_ts, gt_boxes, dt_boxes, time_tol)
         flattened_gt = flattened_gt + gt_win
         flattened_dt = flattened_dt + dt_win
-    return _coco_eval(flattened_gt, flattened_dt, height, width, labelmap=classes, return_aps=return_aps)
+    return _coco_eval(flattened_gt,
+                      flattened_dt,
+                      height,
+                      width,
+                      labelmap=classes,
+                      return_aps=return_aps)
 
 
 def _match_times(all_ts, gt_boxes, dt_boxes, time_tol):
-    """
-    match ground truth boxes and ground truth detections at all timestamps using a specified tolerance
-    return a list of boxes vectors
-    """
+    """match ground truth boxes and ground truth detections at all timestamps
+    using a specified tolerance return a list of boxes vectors."""
     gt_size = len(gt_boxes)
     dt_size = len(dt_boxes)
 
@@ -90,7 +95,12 @@ def _match_times(all_ts, gt_boxes, dt_boxes, time_tol):
     return windowed_gt, windowed_dt
 
 
-def _coco_eval(gts, detections, height, width, labelmap=("car", "pedestrian"), return_aps: bool = True):
+def _coco_eval(gts,
+               detections,
+               height,
+               width,
+               labelmap=('car', 'pedestrian'),
+               return_aps: bool = True):
     """simple helper function wrapping around COCO's Python API
     :params:  gts iterable of numpy boxes for the ground truth
     :params:  detections iterable of numpy boxes for the detections
@@ -98,8 +108,11 @@ def _coco_eval(gts, detections, height, width, labelmap=("car", "pedestrian"), r
     :params:  width int
     :params:  labelmap iterable of class labels
     """
-    categories = [{"id": id + 1, "name": class_name, "supercategory": "none"}
-                  for id, class_name in enumerate(labelmap)]
+    categories = [{
+        'id': id + 1,
+        'name': class_name,
+        'supercategory': 'none'
+    } for id, class_name in enumerate(labelmap)]
 
     num_detections = 0
     for detection in detections:
@@ -114,7 +127,11 @@ def _coco_eval(gts, detections, height, width, labelmap=("car", "pedestrian"), r
         print('no detections for evaluation found.')
         return out_dict if return_aps else None
 
-    dataset, results = _to_coco_format(gts, detections, categories, height=height, width=width)
+    dataset, results = _to_coco_format(gts,
+                                       detections,
+                                       categories,
+                                       height=height,
+                                       width=width)
 
     coco_gt = COCO()
     coco_gt.dataset = dataset
@@ -141,9 +158,7 @@ def coco_eval_return_metrics(coco_eval: COCOeval):
 
 
 def _to_coco_format(gts, detections, categories, height=240, width=304):
-    """
-    utilitary function producing our data in a COCO usable format
-    """
+    """utilitary function producing our data in a COCO usable format."""
     annotations = []
     results = []
     images = []
@@ -152,14 +167,15 @@ def _to_coco_format(gts, detections, categories, height=240, width=304):
     for image_id, (gt, pred) in enumerate(zip(gts, detections)):
         im_id = image_id + 1
 
-        images.append(
-            {"date_captured": "2019",
-             "file_name": "n.a",
-             "id": im_id,
-             "license": 1,
-             "url": "",
-             "height": height,
-             "width": width})
+        images.append({
+            'date_captured': '2019',
+            'file_name': 'n.a',
+            'id': im_id,
+            'license': 1,
+            'url': '',
+            'height': height,
+            'width': width
+        })
 
         for bbox in gt:
             x1, y1 = bbox['x'], bbox['y']
@@ -167,12 +183,12 @@ def _to_coco_format(gts, detections, categories, height=240, width=304):
             area = w * h
 
             annotation = {
-                "area": float(area),
-                "iscrowd": False,
-                "image_id": im_id,
-                "bbox": [x1, y1, w, h],
-                "category_id": int(bbox['class_id']) + 1,
-                "id": len(annotations) + 1
+                'area': float(area),
+                'iscrowd': False,
+                'image_id': im_id,
+                'bbox': [x1, y1, w, h],
+                'category_id': int(bbox['class_id']) + 1,
+                'id': len(annotations) + 1
             }
             annotations.append(annotation)
 
@@ -185,10 +201,12 @@ def _to_coco_format(gts, detections, categories, height=240, width=304):
             }
             results.append(image_result)
 
-    dataset = {"info": {},
-               "licenses": [],
-               "type": 'instances',
-               "images": images,
-               "annotations": annotations,
-               "categories": categories}
+    dataset = {
+        'info': {},
+        'licenses': [],
+        'type': 'instances',
+        'images': images,
+        'annotations': annotations,
+        'categories': categories
+    }
     return dataset, results

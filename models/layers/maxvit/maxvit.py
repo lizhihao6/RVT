@@ -1,7 +1,8 @@
-"""
-Part of this code stems from rwightman's MaxVit implementation:
-https://github.com/huggingface/pytorch-image-models/blob/1885bdc4318cc3be459981ea1a26cd862220864d/timm/models/maxxvit.py
+"""Part of this code stems from rwightman's MaxVit implementation:
+https://github.com/huggingface/pytorch-image-
+models/blob/1885bdc4318cc3be459981ea1a26cd862220864d/timm/models/maxxvit.py
 that is:
+
 - LayerScale
 - PartitionAttentionCl
 - window*
@@ -9,18 +10,17 @@ that is:
 - SelfAttentionCl
 """
 
+import math
 from enum import Enum, auto
 from functools import partial
-from typing import Optional, Union, Tuple, List, Type
+from typing import List, Optional, Tuple, Type, Union
 
-import math
 import torch
 from omegaconf import DictConfig
 from torch import nn
 
-from .layers import DropPath, LayerNorm
-from .layers import get_act_layer, get_norm_layer
-from .layers import to_2tuple, _assert
+from .layers import (DropPath, LayerNorm, _assert, get_act_layer,
+                     get_norm_layer, to_2tuple)
 
 
 class PartitionType(Enum):
@@ -29,21 +29,23 @@ class PartitionType(Enum):
 
 
 def nChw_2_nhwC(x: torch.Tensor):
-    """N C H W -> N H W C
-    """
+    """N C H W -> N H W C."""
     assert x.ndim == 4
     return x.permute(0, 2, 3, 1)
 
 
 def nhwC_2_nChw(x: torch.Tensor):
-    """N H W C -> N C H W
-    """
+    """N H W C -> N C H W."""
     assert x.ndim == 4
     return x.permute(0, 3, 1, 2)
 
 
 class LayerScale(nn.Module):
-    def __init__(self, dim: int, init_values: float=1e-5, inplace: bool=False):
+
+    def __init__(self,
+                 dim: int,
+                 init_values: float = 1e-5,
+                 inplace: bool = False):
         super().__init__()
         self.inplace = inplace
         self.gamma = nn.Parameter(init_values * torch.ones(dim))
@@ -54,6 +56,7 @@ class LayerScale(nn.Module):
 
 
 class GLU(nn.Module):
+
     def __init__(self,
                  dim_in: int,
                  dim_out: int,
@@ -70,7 +73,7 @@ class GLU(nn.Module):
         # Extensive quantitative eval in table 1: https://arxiv.org/abs/2102.11972
         # Section 2 for explanation and implementation details: https://arxiv.org/abs/2002.05202
         # NOTE: Pytorch has a native GLU implementation: https://pytorch.org/docs/stable/generated/torch.nn.GLU.html?highlight=glu#torch.nn.GLU
-        proj_out_dim = dim_out*2
+        proj_out_dim = dim_out * 2
         self.proj = nn.Linear(dim_in, proj_out_dim, bias=bias) if channel_last else \
             nn.Conv2d(dim_in, proj_out_dim, kernel_size=1, stride=1, bias=bias)
         self.channel_dim = -1 if channel_last else 1
@@ -83,6 +86,7 @@ class GLU(nn.Module):
 
 
 class MLP(nn.Module):
+
     def __init__(self,
                  dim: int,
                  channel_last: bool,
@@ -99,8 +103,13 @@ class MLP(nn.Module):
             #inner_dim = round(inner_dim * 2 / 3)
             #inner_dim = math.ceil(inner_dim * 2 / 3 / 32) * 32 # multiple of 32
             #inner_dim = round(inner_dim * 2 / 3 / 32) * 32 # multiple of 32
-            inner_dim = math.floor(inner_dim * 2 / 3 / 32) * 32 # multiple of 32
-            proj_in = GLU(dim_in=dim, dim_out=inner_dim, channel_last=channel_last, act_layer=act_layer, bias=bias)
+            inner_dim = math.floor(
+                inner_dim * 2 / 3 / 32) * 32  # multiple of 32
+            proj_in = GLU(dim_in=dim,
+                          dim_out=inner_dim,
+                          channel_last=channel_last,
+                          act_layer=act_layer,
+                          bias=bias)
         else:
             proj_in = nn.Sequential(
                 nn.Linear(in_features=dim, out_features=inner_dim, bias=bias) if channel_last else \
@@ -119,6 +128,7 @@ class MLP(nn.Module):
 
 
 class DownsampleBase(nn.Module):
+
     def __init__(self):
         super().__init__()
 
@@ -127,8 +137,7 @@ class DownsampleBase(nn.Module):
         raise NotImplementedError
 
 
-def get_downsample_layer_Cf2Cl(dim_in: int,
-                               dim_out: int,
+def get_downsample_layer_Cf2Cl(dim_in: int, dim_out: int,
                                downsample_factor: int,
                                downsample_cfg: DictConfig) -> DownsampleBase:
     type = downsample_cfg.type
@@ -142,12 +151,11 @@ def get_downsample_layer_Cf2Cl(dim_in: int,
 
 class ConvDownsampling_Cf2Cl(DownsampleBase):
     """Downsample with input in NCHW [channel-first] format.
+
     Output in NHWC [channel-last] format.
     """
-    def __init__(self,
-                 dim_in: int,
-                 dim_out: int,
-                 downsample_factor: int,
+
+    def __init__(self, dim_in: int, dim_out: int, downsample_factor: int,
                  downsample_cfg: DictConfig):
         super().__init__()
         assert isinstance(dim_out, int)
@@ -158,8 +166,8 @@ class ConvDownsampling_Cf2Cl(DownsampleBase):
         overlap = downsample_cfg.get('overlap', True)
 
         if overlap:
-            kernel_size = (downsample_factor - 1)*2 + 1
-            padding = kernel_size//2
+            kernel_size = (downsample_factor - 1) * 2 + 1
+            padding = kernel_size // 2
         else:
             kernel_size = downsample_factor
             padding = 0
@@ -169,7 +177,9 @@ class ConvDownsampling_Cf2Cl(DownsampleBase):
                               padding=padding,
                               stride=downsample_factor,
                               bias=False)
-        self.norm = LayerNorm(num_channels=dim_out, eps=1e-5, affine=norm_affine)
+        self.norm = LayerNorm(num_channels=dim_out,
+                              eps=1e-5,
+                              affine=norm_affine)
 
     def forward(self, x: torch.Tensor):
         x = self.conv(x)
@@ -183,19 +193,18 @@ class ConvDownsampling_Cf2Cl(DownsampleBase):
 
 
 class PartitionAttentionCl(nn.Module):
-    """ Grid or Block partition + Attn + FFN.
-    NxC 'channels last' tensor layout.
+    """Grid or Block partition + Attn + FFN. NxC 'channels last' tensor layout.
 
     According to RW, NHWC attention is a few percent faster on GPUs (but slower on TPUs)
     https://github.com/rwightman/pytorch-image-models/blob/4f72bae43be26d9764a08d83b88f8bd4ec3dbe43/timm/models/maxxvit.py#L1258
     """
 
     def __init__(
-            self,
-            dim: int,
-            partition_type: PartitionType,
-            attention_cfg: DictConfig,
-            skip_first_norm: bool=False,
+        self,
+        dim: int,
+        partition_type: PartitionType,
+        attention_cfg: DictConfig,
+        skip_first_norm: bool = False,
     ):
         super().__init__()
         norm_eps = attention_cfg.get('norm_eps', 1e-5)
@@ -226,7 +235,8 @@ class PartitionAttentionCl(nn.Module):
             assert len(partition_size) == 2
         self.partition_size = partition_size
 
-        norm_layer = partial(get_norm_layer('layernorm'), eps=norm_eps)  # NOTE this block is channels-last
+        norm_layer = partial(get_norm_layer('layernorm'),
+                             eps=norm_eps)  # NOTE this block is channels-last
 
         assert isinstance(partition_type, PartitionType)
         self.partition_window = partition_type == PartitionType.WINDOW
@@ -235,19 +245,25 @@ class PartitionAttentionCl(nn.Module):
         self.self_attn = self_attn_module(dim,
                                           dim_head=dim_head,
                                           bias=attention_bias)
-        self.ls1 = LayerScale(dim=dim, init_values=ls_init_value) if ls_init_value > 0 else nn.Identity()
-        self.drop_path1 = DropPath(drop_prob=drop_path) if drop_path > 0 else nn.Identity()
+        self.ls1 = LayerScale(
+            dim=dim,
+            init_values=ls_init_value) if ls_init_value > 0 else nn.Identity()
+        self.drop_path1 = DropPath(
+            drop_prob=drop_path) if drop_path > 0 else nn.Identity()
 
         self.norm2 = norm_layer(dim)
-        self.mlp = MLP(dim = dim,
+        self.mlp = MLP(dim=dim,
                        channel_last=True,
-                       expansion_ratio = mlp_expand_ratio,
-                       act_layer = mlp_act_layer,
-                       gated = mlp_gated,
-                       bias = mlp_bias,
-                       drop_prob = drop_mlp)
-        self.ls2 = LayerScale(dim=dim, init_values=ls_init_value) if ls_init_value > 0 else nn.Identity()
-        self.drop_path2 = DropPath(drop_prob=drop_path) if drop_path > 0 else nn.Identity()
+                       expansion_ratio=mlp_expand_ratio,
+                       act_layer=mlp_act_layer,
+                       gated=mlp_gated,
+                       bias=mlp_bias,
+                       drop_prob=drop_mlp)
+        self.ls2 = LayerScale(
+            dim=dim,
+            init_values=ls_init_value) if ls_init_value > 0 else nn.Identity()
+        self.drop_path2 = DropPath(
+            drop_prob=drop_path) if drop_path > 0 else nn.Identity()
 
     def _partition_attn(self, x):
         img_size = x.shape[1:3]
@@ -259,9 +275,11 @@ class PartitionAttentionCl(nn.Module):
         partitioned = self.self_attn(partitioned)
 
         if self.partition_window:
-            x = window_reverse(partitioned, self.partition_size, (img_size[0], img_size[1]))
+            x = window_reverse(partitioned, self.partition_size,
+                               (img_size[0], img_size[1]))
         else:
-            x = grid_reverse(partitioned, self.partition_size, (img_size[0], img_size[1]))
+            x = grid_reverse(partitioned, self.partition_size,
+                             (img_size[0], img_size[1]))
         return x
 
     def forward(self, x):
@@ -272,70 +290,80 @@ class PartitionAttentionCl(nn.Module):
 
 def window_partition(x, window_size: Tuple[int, int]):
     B, H, W, C = x.shape
-    _assert(H % window_size[0] == 0, f'height ({H}) must be divisible by window ({window_size[0]})')
-    _assert(W % window_size[1] == 0, f'width ({W}) must be divisible by window ({window_size[1]})')
-    x = x.view(B, H // window_size[0], window_size[0], W // window_size[1], window_size[1], C)
-    windows = x.permute(0, 1, 3, 2, 4, 5).contiguous().view(-1, window_size[0], window_size[1], C)
+    _assert(H % window_size[0] == 0,
+            f'height ({H}) must be divisible by window ({window_size[0]})')
+    _assert(W % window_size[1] == 0,
+            f'width ({W}) must be divisible by window ({window_size[1]})')
+    x = x.view(B, H // window_size[0], window_size[0], W // window_size[1],
+               window_size[1], C)
+    windows = x.permute(0, 1, 3, 2, 4,
+                        5).contiguous().view(-1, window_size[0],
+                                             window_size[1], C)
     return windows
 
 
-def window_reverse(windows, window_size: Tuple[int, int], img_size: Tuple[int, int]):
+def window_reverse(windows, window_size: Tuple[int, int],
+                   img_size: Tuple[int, int]):
     H, W = img_size
     C = windows.shape[-1]
-    x = windows.view(-1, H // window_size[0], W // window_size[1], window_size[0], window_size[1], C)
+    x = windows.view(-1, H // window_size[0], W // window_size[1],
+                     window_size[0], window_size[1], C)
     x = x.permute(0, 1, 3, 2, 4, 5).contiguous().view(-1, H, W, C)
     return x
 
 
 def grid_partition(x, grid_size: Tuple[int, int]):
     B, H, W, C = x.shape
-    _assert(H % grid_size[0] == 0, f'height {H} must be divisible by grid {grid_size[0]}')
-    _assert(W % grid_size[1] == 0, f'width {W} must be divisible by grid {grid_size[1]}')
-    x = x.view(B, grid_size[0], H // grid_size[0], grid_size[1], W // grid_size[1], C)
-    windows = x.permute(0, 2, 4, 1, 3, 5).contiguous().view(-1, grid_size[0], grid_size[1], C)
+    _assert(H % grid_size[0] == 0,
+            f'height {H} must be divisible by grid {grid_size[0]}')
+    _assert(W % grid_size[1] == 0,
+            f'width {W} must be divisible by grid {grid_size[1]}')
+    x = x.view(B, grid_size[0], H // grid_size[0], grid_size[1],
+               W // grid_size[1], C)
+    windows = x.permute(0, 2, 4, 1, 3,
+                        5).contiguous().view(-1, grid_size[0], grid_size[1], C)
     return windows
 
 
-def grid_reverse(windows, grid_size: Tuple[int, int], img_size: Tuple[int, int]):
+def grid_reverse(windows, grid_size: Tuple[int, int], img_size: Tuple[int,
+                                                                      int]):
     H, W = img_size
     C = windows.shape[-1]
-    x = windows.view(-1, H // grid_size[0], W // grid_size[1], grid_size[0], grid_size[1], C)
+    x = windows.view(-1, H // grid_size[0], W // grid_size[1], grid_size[0],
+                     grid_size[1], C)
     x = x.permute(0, 3, 1, 4, 2, 5).contiguous().view(-1, H, W, C)
     return x
 
 
 class TorchMHSAWrapperCl(nn.Module):
-    """ Channels-last multi-head self-attention (B, ..., C) """
-    def __init__(
-            self,
-            dim: int,
-            dim_head: int = 32,
-            bias: bool = True):
+    """Channels-last multi-head self-attention (B, ..., C)"""
+
+    def __init__(self, dim: int, dim_head: int = 32, bias: bool = True):
         super().__init__()
         assert dim % dim_head == 0
         num_heads = dim // dim_head
-        self.mha = nn.MultiheadAttention(embed_dim=dim, num_heads=num_heads, bias=bias, batch_first=True)
+        self.mha = nn.MultiheadAttention(embed_dim=dim,
+                                         num_heads=num_heads,
+                                         bias=bias,
+                                         batch_first=True)
 
     def forward(self, x: torch.Tensor):
         restore_shape = x.shape
         B, C = restore_shape[0], restore_shape[-1]
         x = x.view(B, -1, C)
-        attn_output, attn_output_weights =  self.mha(query=x, key=x, value=x)
+        attn_output, attn_output_weights = self.mha(query=x, key=x, value=x)
         attn_output = attn_output.reshape(restore_shape)
         return attn_output
 
 
 class SelfAttentionCl(nn.Module):
-    """ Channels-last multi-head self-attention (B, ..., C) """
-    def __init__(
-            self,
-            dim: int,
-            dim_head: int = 32,
-            bias: bool = True):
+    """Channels-last multi-head self-attention (B, ..., C)"""
+
+    def __init__(self, dim: int, dim_head: int = 32, bias: bool = True):
         super().__init__()
         self.num_heads = dim // dim_head
         self.dim_head = dim_head
-        self.scale = dim_head ** -0.5
+        self.scale = dim_head**-0.5
 
         self.qkv = nn.Linear(dim, dim * 3, bias=bias)
         self.proj = nn.Linear(dim, dim, bias=bias)
@@ -344,25 +372,32 @@ class SelfAttentionCl(nn.Module):
         B = x.shape[0]
         restore_shape = x.shape[:-1]
 
-        q, k, v = self.qkv(x).view(B, -1, self.num_heads, self.dim_head * 3).transpose(1, 2).chunk(3, dim=3)
+        q, k, v = self.qkv(x).view(B, -1, self.num_heads,
+                                   self.dim_head * 3).transpose(1,
+                                                                2).chunk(3,
+                                                                         dim=3)
 
         attn = (q @ k.transpose(-2, -1)) * self.scale
         attn = attn.softmax(dim=-1)
 
-        x = (attn @ v).transpose(1, 2).reshape(restore_shape + (-1,))
+        x = (attn @ v).transpose(1, 2).reshape(restore_shape + (-1, ))
         x = self.proj(x)
         return x
 
 
-def assert_activation_string(activation_string: Optional[Union[str, Tuple[str, ...], List[str]]]) -> None:
+def assert_activation_string(
+    activation_string: Optional[Union[str, Tuple[str, ...],
+                                      List[str]]]) -> None:
     # Serves as a hacky documentation and sanity check.
     # List of possible activation layer strings that are reasonable:
     # https://github.com/rwightman/pytorch-image-models/blob/a520da9b495422bc773fb5dfe10819acb8bd7c5c/timm/models/layers/create_act.py#L62
     if activation_string is None:
         return
     if isinstance(activation_string, str):
-        assert activation_string in ('silu', 'swish', 'mish', 'relu', 'relu6', 'leaky_relu', 'elu', 'prelu', 'celu', 'selu',
-                             'gelu', 'sigmoid', 'tanh', 'hard_sigmoid', 'hard_swish', 'hard_mish')
+        assert activation_string in ('silu', 'swish', 'mish', 'relu', 'relu6',
+                                     'leaky_relu', 'elu', 'prelu', 'celu',
+                                     'selu', 'gelu', 'sigmoid', 'tanh',
+                                     'hard_sigmoid', 'hard_swish', 'hard_mish')
     elif isinstance(activation_string, (tuple, list)):
         for entry in activation_string:
             assert_activation_string(activation_string=entry)
@@ -370,14 +405,16 @@ def assert_activation_string(activation_string: Optional[Union[str, Tuple[str, .
         raise NotImplementedError
 
 
-def assert_norm2d_layer_string(norm_layer: Optional[Union[str, Tuple[str, ...], List[str]]]) -> None:
+def assert_norm2d_layer_string(
+        norm_layer: Optional[Union[str, Tuple[str, ...], List[str]]]) -> None:
     # Serves as a hacky documentation and sanity check.
     # List of possible norm layer strings that are reasonable:
     # https://github.com/rwightman/pytorch-image-models/blob/4f72bae43be26d9764a08d83b88f8bd4ec3dbe43/timm/models/layers/create_norm.py#L14
     if norm_layer is None:
         return
     if isinstance(norm_layer, str):
-        assert norm_layer in ('batchnorm', 'batchnorm2d', 'groupnorm', 'layernorm2d')
+        assert norm_layer in ('batchnorm', 'batchnorm2d', 'groupnorm',
+                              'layernorm2d')
     elif isinstance(norm_layer, (tuple, list)):
         for entry in norm_layer:
             assert_norm2d_layer_string(norm_layer=entry)

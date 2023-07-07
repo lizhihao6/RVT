@@ -1,4 +1,4 @@
-""" Activations
+"""Activations.
 
 A collection of jit-scripted activations fn and modules with a common interface so that they can
 easily be swapped. All have an `inplace` arg even if not used.
@@ -30,6 +30,7 @@ def mish_jit(x, _inplace: bool = False):
 
 
 class SwishJit(nn.Module):
+
     def __init__(self, inplace: bool = False):
         super(SwishJit, self).__init__()
 
@@ -38,6 +39,7 @@ class SwishJit(nn.Module):
 
 
 class MishJit(nn.Module):
+
     def __init__(self, inplace: bool = False):
         super(MishJit, self).__init__()
 
@@ -48,10 +50,12 @@ class MishJit(nn.Module):
 @torch.jit.script
 def hard_sigmoid_jit(x, inplace: bool = False):
     # return F.relu6(x + 3.) / 6.
-    return (x + 3).clamp(min=0, max=6).div(6.)  # clamp seems ever so slightly faster?
+    return (x + 3).clamp(min=0,
+                         max=6).div(6.)  # clamp seems ever so slightly faster?
 
 
 class HardSigmoidJit(nn.Module):
+
     def __init__(self, inplace: bool = False):
         super(HardSigmoidJit, self).__init__()
 
@@ -62,10 +66,12 @@ class HardSigmoidJit(nn.Module):
 @torch.jit.script
 def hard_swish_jit(x, inplace: bool = False):
     # return x * (F.relu6(x + 3.) / 6)
-    return x * (x + 3).clamp(min=0, max=6).div(6.)  # clamp seems ever so slightly faster?
+    return x * (x + 3).clamp(min=0, max=6).div(
+        6.)  # clamp seems ever so slightly faster?
 
 
 class HardSwishJit(nn.Module):
+
     def __init__(self, inplace: bool = False):
         super(HardSwishJit, self).__init__()
 
@@ -75,14 +81,14 @@ class HardSwishJit(nn.Module):
 
 @torch.jit.script
 def hard_mish_jit(x, inplace: bool = False):
-    """ Hard Mish
-    Experimental, based on notes by Mish author Diganta Misra at
-      https://github.com/digantamisra98/H-Mish/blob/0da20d4bc58e696b6803f2523c58d3c8a82782d0/README.md
-    """
+    """Hard Mish Experimental, based on notes by Mish author Diganta Misra at h
+    ttps://github.com/digantamisra98/H-Mish/blob/0da20d4bc58e696b6803f2523c58d3
+    c8a82782d0/README.md."""
     return 0.5 * x * (x + 2).clamp(min=0, max=2)
 
 
 class HardMishJit(nn.Module):
+
     def __init__(self, inplace: bool = False):
         super(HardMishJit, self).__init__()
 

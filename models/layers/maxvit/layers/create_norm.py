@@ -1,11 +1,11 @@
-""" Norm Layer Factory
+"""Norm Layer Factory.
 
 Create norm modules by string (to mirror create_act and creat_norm-act fns)
 
 Copyright 2022 Ross Wightman
 """
-import types
 import functools
+import types
 
 import torch.nn as nn
 
@@ -23,14 +23,19 @@ _NORM_MAP = dict(
 _NORM_TYPES = {m for n, m in _NORM_MAP.items()}
 
 
-def create_norm_layer(layer_name, num_features, act_layer=None, apply_act=True, **kwargs):
+def create_norm_layer(layer_name,
+                      num_features,
+                      act_layer=None,
+                      apply_act=True,
+                      **kwargs):
     layer = get_norm_layer(layer_name, act_layer=act_layer)
     layer_instance = layer(num_features, apply_act=apply_act, **kwargs)
     return layer_instance
 
 
 def get_norm_layer(norm_layer):
-    assert isinstance(norm_layer, (type, str,  types.FunctionType, functools.partial))
+    assert isinstance(norm_layer,
+                      (type, str, types.FunctionType, functools.partial))
     norm_kwargs = {}
 
     # unbind partial fn, so args can be rebound later
@@ -49,8 +54,9 @@ def get_norm_layer(norm_layer):
     else:
         type_name = norm_layer.__name__.lower().replace('_', '')
         norm_layer = _NORM_MAP.get(type_name, None)
-        assert norm_layer is not None, f"No equivalent norm layer for {type_name}"
+        assert norm_layer is not None, f'No equivalent norm layer for {type_name}'
 
     if norm_kwargs:
-        norm_layer = functools.partial(norm_layer, **norm_kwargs)  # bind/rebind args
+        norm_layer = functools.partial(norm_layer,
+                                       **norm_kwargs)  # bind/rebind args
     return norm_layer

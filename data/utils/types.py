@@ -1,9 +1,10 @@
-from enum import auto, Enum
+from enum import Enum, auto
 
 try:
     from enum import StrEnum
 except ImportError:
     from strenum import StrEnum
+
 from typing import Dict, List, Optional, Tuple, Union
 
 import torch as th
@@ -13,6 +14,7 @@ from data.genx_utils.labels import ObjectLabels, SparselyBatchedObjectLabels
 
 class DataType(Enum):
     EV_REPR = auto()
+    OFFSETS = auto()
     FLOW = auto()
     IMAGE = auto()
     OBJLABELS = auto()
@@ -46,7 +48,9 @@ class ObjDetOutput(Enum):
     SKIP_VIZ = auto()
 
 
-LoaderDataDictGenX = Dict[DataType, Union[List[th.Tensor], ObjectLabels, SparselyBatchedObjectLabels, List[bool]]]
+LoaderDataDictGenX = Dict[DataType,
+                          Union[List[th.Tensor], ObjectLabels,
+                                SparselyBatchedObjectLabels, List[bool]]]
 
 LstmState = Optional[Tuple[th.Tensor, th.Tensor]]
 LstmStates = List[LstmState]

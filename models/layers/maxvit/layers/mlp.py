@@ -1,4 +1,4 @@
-""" MLP module w/ dropout and configurable activation layer
+"""MLP module w/ dropout and configurable activation layer.
 
 Hacked together by / Copyright 2020 Ross Wightman
 """
@@ -8,9 +8,15 @@ from .helpers import to_2tuple
 
 
 class Mlp(nn.Module):
-    """ MLP as used in Vision Transformer, MLP-Mixer and related networks
-    """
-    def __init__(self, in_features, hidden_features=None, out_features=None, act_layer=nn.GELU, bias=True, drop=0.):
+    """MLP as used in Vision Transformer, MLP-Mixer and related networks."""
+
+    def __init__(self,
+                 in_features,
+                 hidden_features=None,
+                 out_features=None,
+                 act_layer=nn.GELU,
+                 bias=True,
+                 drop=0.):
         super().__init__()
         out_features = out_features or in_features
         hidden_features = hidden_features or in_features
@@ -36,7 +42,14 @@ class GluMlp(nn.Module):
     """ MLP w/ GLU style gating
     See: https://arxiv.org/abs/1612.08083, https://arxiv.org/abs/2002.05202
     """
-    def __init__(self, in_features, hidden_features=None, out_features=None, act_layer=nn.Sigmoid, bias=True, drop=0.):
+
+    def __init__(self,
+                 in_features,
+                 hidden_features=None,
+                 out_features=None,
+                 act_layer=nn.Sigmoid,
+                 bias=True,
+                 drop=0.):
         super().__init__()
         out_features = out_features or in_features
         hidden_features = hidden_features or in_features
@@ -67,11 +80,16 @@ class GluMlp(nn.Module):
 
 
 class GatedMlp(nn.Module):
-    """ MLP as used in gMLP
-    """
-    def __init__(
-            self, in_features, hidden_features=None, out_features=None, act_layer=nn.GELU,
-            gate_layer=None, bias=True, drop=0.):
+    """MLP as used in gMLP."""
+
+    def __init__(self,
+                 in_features,
+                 hidden_features=None,
+                 out_features=None,
+                 act_layer=nn.GELU,
+                 gate_layer=None,
+                 bias=True,
+                 drop=0.):
         super().__init__()
         out_features = out_features or in_features
         hidden_features = hidden_features or in_features
@@ -101,21 +119,33 @@ class GatedMlp(nn.Module):
 
 
 class ConvMlp(nn.Module):
-    """ MLP using 1x1 convs that keeps spatial dims
-    """
-    def __init__(
-            self, in_features, hidden_features=None, out_features=None, act_layer=nn.ReLU,
-            norm_layer=None, bias=True, drop=0.):
+    """MLP using 1x1 convs that keeps spatial dims."""
+
+    def __init__(self,
+                 in_features,
+                 hidden_features=None,
+                 out_features=None,
+                 act_layer=nn.ReLU,
+                 norm_layer=None,
+                 bias=True,
+                 drop=0.):
         super().__init__()
         out_features = out_features or in_features
         hidden_features = hidden_features or in_features
         bias = to_2tuple(bias)
 
-        self.fc1 = nn.Conv2d(in_features, hidden_features, kernel_size=1, bias=bias[0])
-        self.norm = norm_layer(hidden_features) if norm_layer else nn.Identity()
+        self.fc1 = nn.Conv2d(in_features,
+                             hidden_features,
+                             kernel_size=1,
+                             bias=bias[0])
+        self.norm = norm_layer(
+            hidden_features) if norm_layer else nn.Identity()
         self.act = act_layer()
         self.drop = nn.Dropout(drop)
-        self.fc2 = nn.Conv2d(hidden_features, out_features, kernel_size=1, bias=bias[1])
+        self.fc2 = nn.Conv2d(hidden_features,
+                             out_features,
+                             kernel_size=1,
+                             bias=bias[1])
 
     def forward(self, x):
         x = self.fc1(x)

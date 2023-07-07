@@ -1,11 +1,11 @@
 import os
 
 os.environ['CUDA_DEVICE_ORDER'] = 'PCI_BUS_ID'
-os.environ["OMP_NUM_THREADS"] = "1"
-os.environ["OPENBLAS_NUM_THREADS"] = "1"
-os.environ["MKL_NUM_THREADS"] = "1"
-os.environ["VECLIB_MAXIMUM_THREADS"] = "1"
-os.environ["NUMEXPR_NUM_THREADS"] = "1"
+os.environ['OMP_NUM_THREADS'] = '1'
+os.environ['OPENBLAS_NUM_THREADS'] = '1'
+os.environ['MKL_NUM_THREADS'] = '1'
+os.environ['VECLIB_MAXIMUM_THREADS'] = '1'
+os.environ['NUMEXPR_NUM_THREADS'] = '1'
 from pathlib import Path
 
 import torch
@@ -16,10 +16,10 @@ cudnn.allow_tf32 = True
 torch.multiprocessing.set_sharing_strategy('file_system')
 
 import hydra
-from omegaconf import DictConfig, OmegaConf
 import pytorch_lightning as pl
-from pytorch_lightning.loggers import CSVLogger
+from omegaconf import DictConfig, OmegaConf
 from pytorch_lightning.callbacks import ModelSummary
+from pytorch_lightning.loggers import CSVLogger
 
 from config.modifier import dynamically_modify_train_config
 from modules.utils.fetch import fetch_data_module, fetch_model_module
@@ -58,7 +58,8 @@ def main(config: DictConfig):
     # ---------------------
 
     module = fetch_model_module(config=config)
-    module = module.load_from_checkpoint(str(ckpt_path), **{'full_config': config})
+    module = module.load_from_checkpoint(str(ckpt_path),
+                                         **{'full_config': config})
 
     # ---------------------
     # Callbacks and Misc
@@ -81,9 +82,13 @@ def main(config: DictConfig):
     )
     with torch.inference_mode():
         if config.use_test_set:
-            trainer.test(model=module, datamodule=data_module, ckpt_path=str(ckpt_path))
+            trainer.test(model=module,
+                         datamodule=data_module,
+                         ckpt_path=str(ckpt_path))
         else:
-            trainer.validate(model=module, datamodule=data_module, ckpt_path=str(ckpt_path))
+            trainer.validate(model=module,
+                             datamodule=data_module,
+                             ckpt_path=str(ckpt_path))
 
 
 if __name__ == '__main__':

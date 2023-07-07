@@ -1,4 +1,4 @@
-from typing import Any, Optional, Tuple, Union, Dict
+from typing import Any, Dict, Optional, Tuple, Union
 from warnings import warn
 
 import numpy as np
@@ -10,17 +10,20 @@ from omegaconf import DictConfig
 from pytorch_lightning.utilities.types import STEP_OUTPUT
 
 from data.genx_utils.labels import ObjectLabels
-from data.utils.types import DataType, LstmStates, ObjDetOutput, DatasetSamplingMode
+from data.utils.types import (DatasetSamplingMode, DataType, LstmStates,
+                              ObjDetOutput)
 from models.detection.yolox.utils.boxes import postprocess
 from models.detection.yolox_extension.models.detector import YoloXDetector
 from utils.evaluation.prophesee.evaluator import PropheseeEvaluator
 from utils.evaluation.prophesee.io.box_loading import to_prophesee
 from utils.padding import InputPadderFromShape
-from .utils.detection import BackboneFeatureSelector, EventReprSelector, RNNStates, Mode, mode_2_string, \
-    merge_mixed_batches
+
+from .utils.detection import (BackboneFeatureSelector, EventReprSelector, Mode,
+                              RNNStates, merge_mixed_batches, mode_2_string)
 
 
 class Module(pl.LightningModule):
+
     def __init__(self, full_config: DictConfig):
         super().__init__()
 
@@ -42,7 +45,8 @@ class Module(pl.LightningModule):
         dataset_name = self.full_config.dataset.name
         self.mode_2_hw: Dict[Mode, Optional[Tuple[int, int]]] = {}
         self.mode_2_batch_size: Dict[Mode, Optional[int]] = {}
-        self.mode_2_psee_evaluator: Dict[Mode, Optional[PropheseeEvaluator]] = {}
+        self.mode_2_psee_evaluator: Dict[Mode,
+                                         Optional[PropheseeEvaluator]] = {}
         self.mode_2_sampling_mode: Dict[Mode, DatasetSamplingMode] = {}
 
         self.started_training = True
@@ -50,16 +54,21 @@ class Module(pl.LightningModule):
         dataset_train_sampling = self.full_config.dataset.train.sampling
         dataset_eval_sampling = self.full_config.dataset.eval.sampling
         assert dataset_train_sampling in iter(DatasetSamplingMode)
-        assert dataset_eval_sampling in (DatasetSamplingMode.STREAM, DatasetSamplingMode.RANDOM)
+        assert dataset_eval_sampling in (DatasetSamplingMode.STREAM,
+                                         DatasetSamplingMode.RANDOM)
         if stage == 'fit':  # train + val
             self.train_config = self.full_config.training
             self.train_metrics_config = self.full_config.logging.train.metrics
 
             if self.train_metrics_config.compute:
                 self.mode_2_psee_evaluator[Mode.TRAIN] = PropheseeEvaluator(
-                    dataset=dataset_name, downsample_by_2=self.full_config.dataset.downsample_by_factor_2)
+                    dataset=dataset_name,
+                    downsample_by_2=self.full_config.dataset.
+                    downsample_by_factor_2)
             self.mode_2_psee_evaluator[Mode.VAL] = PropheseeEvaluator(
-                dataset=dataset_name, downsample_by_2=self.full_config.dataset.downsample_by_factor_2)
+                dataset=dataset_name,
+                downsample_by_2=self.full_config.dataset.downsample_by_factor_2
+            )
             self.mode_2_sampling_mode[Mode.TRAIN] = dataset_train_sampling
             self.mode_2_sampling_mode[Mode.VAL] = dataset_eval_sampling
 
@@ -70,14 +79,18 @@ class Module(pl.LightningModule):
         elif stage == 'validate':
             mode = Mode.VAL
             self.mode_2_psee_evaluator[mode] = PropheseeEvaluator(
-                dataset=dataset_name, downsample_by_2=self.full_config.dataset.downsample_by_factor_2)
+                dataset=dataset_name,
+                downsample_by_2=self.full_config.dataset.downsample_by_factor_2
+            )
             self.mode_2_sampling_mode[Mode.VAL] = dataset_eval_sampling
             self.mode_2_hw[mode] = None
             self.mode_2_batch_size[mode] = None
         elif stage == 'test':
             mode = Mode.TEST
             self.mode_2_psee_evaluator[mode] = PropheseeEvaluator(
-                dataset=dataset_name, downsample_by_2=self.full_config.dataset.downsample_by_factor_2)
+                dataset=dataset_name,
+                downsample_by_2=self.full_config.dataset.downsample_by_factor_2
+            )
             self.mode_2_sampling_mode[Mode.TEST] = dataset_eval_sampling
             self.mode_2_hw[mode] = None
             self.mode_2_batch_size[mode] = None
@@ -114,7 +127,8 @@ class Module(pl.LightningModule):
         is_first_sample = data[DataType.IS_FIRST_SAMPLE]
         token_mask_sequence = data.get(DataType.TOKEN_MASK, None)
 
-        self.mode_2_rnn_states[mode].reset(worker_id=worker_id, indices_or_bool_tensor=is_first_sample)
+        self.mode_2_rnn_states[mode].reset(
+            worker_id=worker_id, indices_or_bool_tensor=is_first_sample)
 
         sequence_len = len(ev_tensor_sequence)
         assert sequence_len > 0
@@ -124,7 +138,8 @@ class Module(pl.LightningModule):
         else:
             assert self.mode_2_batch_size[mode] == batch_size
 
-        prev_states = self.mode_2_rnn_states[mode].get_states(worker_id=worker_id)
+        prev_states = self.mode_2_rnn_states[mode].get_states(
+            worker_id=worker_id)
         backbone_feature_selector = BackboneFeatureSelector()
         ev_repr_selector = EventReprSelector()
         obj_labels = list()
@@ -133,7 +148,8 @@ class Module(pl.LightningModule):
             ev_tensors = ev_tensors.to(dtype=self.dtype)
             ev_tensors = self.input_padder.pad_tensor_ev_repr(ev_tensors)
             if token_mask_sequence is not None:
-                token_masks = self.input_padder.pad_token_mask(token_mask=token_mask_sequence[tidx])
+                token_masks = self.input_padder.pad_token_mask(
+                    token_mask=token_mask_sequence[tidx])
             else:
                 token_masks = None
 
@@ -142,59 +158,79 @@ class Module(pl.LightningModule):
             else:
                 assert self.mode_2_hw[mode] == ev_tensors.shape[-2:]
 
-            backbone_features, states = self.mdl.forward_backbone(x=ev_tensors,
-                                                                  previous_states=prev_states,
-                                                                  token_mask=token_masks)
+            backbone_features, states = self.mdl.forward_backbone(
+                x=ev_tensors,
+                previous_states=prev_states,
+                token_mask=token_masks)
             prev_states = states
 
-            current_labels, valid_batch_indices = sparse_obj_labels[tidx].get_valid_labels_and_batch_indices()
+            current_labels, valid_batch_indices = sparse_obj_labels[
+                tidx].get_valid_labels_and_batch_indices()
             # Store backbone features that correspond to the available labels.
             if len(current_labels) > 0:
-                backbone_feature_selector.add_backbone_features(backbone_features=backbone_features,
-                                                                selected_indices=valid_batch_indices)
+                backbone_feature_selector.add_backbone_features(
+                    backbone_features=backbone_features,
+                    selected_indices=valid_batch_indices)
                 obj_labels.extend(current_labels)
-                ev_repr_selector.add_event_representations(event_representations=ev_tensors,
-                                                           selected_indices=valid_batch_indices)
+                ev_repr_selector.add_event_representations(
+                    event_representations=ev_tensors,
+                    selected_indices=valid_batch_indices)
 
-        self.mode_2_rnn_states[mode].save_states_and_detach(worker_id=worker_id, states=prev_states)
+        self.mode_2_rnn_states[mode].save_states_and_detach(
+            worker_id=worker_id, states=prev_states)
         assert len(obj_labels) > 0
         # Batch the backbone features and labels to parallelize the detection code.
-        selected_backbone_features = backbone_feature_selector.get_batched_backbone_features()
-        labels_yolox = ObjectLabels.get_labels_as_batched_tensor(obj_label_list=obj_labels, format_='yolox')
+        selected_backbone_features = backbone_feature_selector.get_batched_backbone_features(
+        )
+        labels_yolox = ObjectLabels.get_labels_as_batched_tensor(
+            obj_label_list=obj_labels, format_='yolox')
         labels_yolox = labels_yolox.to(dtype=self.dtype)
 
-        predictions, losses = self.mdl.forward_detect(backbone_features=selected_backbone_features,
-                                                      targets=labels_yolox)
+        predictions, losses = self.mdl.forward_detect(
+            backbone_features=selected_backbone_features, targets=labels_yolox)
 
-        if self.mode_2_sampling_mode[mode] in (DatasetSamplingMode.MIXED, DatasetSamplingMode.RANDOM):
+        if self.mode_2_sampling_mode[mode] in (DatasetSamplingMode.MIXED,
+                                               DatasetSamplingMode.RANDOM):
             # We only want to evaluate the last batch_size samples if we use random sampling (or mixed).
             # This is because otherwise we would mostly evaluate the init phase of the sequence.
             predictions = predictions[-batch_size:]
             obj_labels = obj_labels[-batch_size:]
 
-        pred_processed = postprocess(prediction=predictions,
-                                     num_classes=self.mdl_config.head.num_classes,
-                                     conf_thre=self.mdl_config.postprocess.confidence_threshold,
-                                     nms_thre=self.mdl_config.postprocess.nms_threshold)
+        pred_processed = postprocess(
+            prediction=predictions,
+            num_classes=self.mdl_config.head.num_classes,
+            conf_thre=self.mdl_config.postprocess.confidence_threshold,
+            nms_thre=self.mdl_config.postprocess.nms_threshold)
 
-        loaded_labels_proph, yolox_preds_proph = to_prophesee(obj_labels, pred_processed)
+        loaded_labels_proph, yolox_preds_proph = to_prophesee(
+            obj_labels, pred_processed)
 
         assert losses is not None
         assert 'loss' in losses
 
         # For visualization, we only use the last batch_size items.
         output = {
-            ObjDetOutput.LABELS_PROPH: loaded_labels_proph[-batch_size:],
-            ObjDetOutput.PRED_PROPH: yolox_preds_proph[-batch_size:],
-            ObjDetOutput.EV_REPR: ev_repr_selector.get_event_representations_as_list(start_idx=-batch_size),
-            ObjDetOutput.SKIP_VIZ: False,
-            'loss': losses['loss']
+            ObjDetOutput.LABELS_PROPH:
+            loaded_labels_proph[-batch_size:],
+            ObjDetOutput.PRED_PROPH:
+            yolox_preds_proph[-batch_size:],
+            ObjDetOutput.EV_REPR:
+            ev_repr_selector.get_event_representations_as_list(
+                start_idx=-batch_size),
+            ObjDetOutput.SKIP_VIZ:
+            False,
+            'loss':
+            losses['loss']
         }
 
         # Logging
         prefix = f'{mode_2_string[mode]}/'
         log_dict = {f'{prefix}{k}': v for k, v in losses.items()}
-        self.log_dict(log_dict, on_step=True, on_epoch=True, batch_size=batch_size, sync_dist=True)
+        self.log_dict(log_dict,
+                      on_step=True,
+                      on_epoch=True,
+                      batch_size=batch_size,
+                      sync_dist=True)
 
         if mode in self.mode_2_psee_evaluator:
             self.mode_2_psee_evaluator[mode].add_labels(loaded_labels_proph)
@@ -205,7 +241,8 @@ class Module(pl.LightningModule):
 
         return output
 
-    def _val_test_step_impl(self, batch: Any, mode: Mode) -> Optional[STEP_OUTPUT]:
+    def _val_test_step_impl(self, batch: Any,
+                            mode: Mode) -> Optional[STEP_OUTPUT]:
         data = self.get_data_from_batch(batch)
         worker_id = self.get_worker_id_from_batch(batch)
 
@@ -214,7 +251,8 @@ class Module(pl.LightningModule):
         sparse_obj_labels = data[DataType.OBJLABELS_SEQ]
         is_first_sample = data[DataType.IS_FIRST_SAMPLE]
 
-        self.mode_2_rnn_states[mode].reset(worker_id=worker_id, indices_or_bool_tensor=is_first_sample)
+        self.mode_2_rnn_states[mode].reset(
+            worker_id=worker_id, indices_or_bool_tensor=is_first_sample)
 
         sequence_len = len(ev_tensor_sequence)
         assert sequence_len > 0
@@ -224,7 +262,8 @@ class Module(pl.LightningModule):
         else:
             assert self.mode_2_batch_size[mode] == batch_size
 
-        prev_states = self.mode_2_rnn_states[mode].get_states(worker_id=worker_id)
+        prev_states = self.mode_2_rnn_states[mode].get_states(
+            worker_id=worker_id)
         backbone_feature_selector = BackboneFeatureSelector()
         ev_repr_selector = EventReprSelector()
         obj_labels = list()
@@ -239,38 +278,52 @@ class Module(pl.LightningModule):
             else:
                 assert self.mode_2_hw[mode] == ev_tensors.shape[-2:]
 
-            backbone_features, states = self.mdl.forward_backbone(x=ev_tensors, previous_states=prev_states)
+            backbone_features, states = self.mdl.forward_backbone(
+                x=ev_tensors, previous_states=prev_states)
             prev_states = states
 
             if collect_predictions:
-                current_labels, valid_batch_indices = sparse_obj_labels[tidx].get_valid_labels_and_batch_indices()
+                current_labels, valid_batch_indices = sparse_obj_labels[
+                    tidx].get_valid_labels_and_batch_indices()
                 # Store backbone features that correspond to the available labels.
                 if len(current_labels) > 0:
-                    backbone_feature_selector.add_backbone_features(backbone_features=backbone_features,
-                                                                    selected_indices=valid_batch_indices)
+                    backbone_feature_selector.add_backbone_features(
+                        backbone_features=backbone_features,
+                        selected_indices=valid_batch_indices)
 
                     obj_labels.extend(current_labels)
-                    ev_repr_selector.add_event_representations(event_representations=ev_tensors,
-                                                               selected_indices=valid_batch_indices)
-        self.mode_2_rnn_states[mode].save_states_and_detach(worker_id=worker_id, states=prev_states)
+                    ev_repr_selector.add_event_representations(
+                        event_representations=ev_tensors,
+                        selected_indices=valid_batch_indices)
+        self.mode_2_rnn_states[mode].save_states_and_detach(
+            worker_id=worker_id, states=prev_states)
         if len(obj_labels) == 0:
             return {ObjDetOutput.SKIP_VIZ: True}
-        selected_backbone_features = backbone_feature_selector.get_batched_backbone_features()
-        predictions, _ = self.mdl.forward_detect(backbone_features=selected_backbone_features)
+        selected_backbone_features = backbone_feature_selector.get_batched_backbone_features(
+        )
+        predictions, _ = self.mdl.forward_detect(
+            backbone_features=selected_backbone_features)
 
-        pred_processed = postprocess(prediction=predictions,
-                                     num_classes=self.mdl_config.head.num_classes,
-                                     conf_thre=self.mdl_config.postprocess.confidence_threshold,
-                                     nms_thre=self.mdl_config.postprocess.nms_threshold)
+        pred_processed = postprocess(
+            prediction=predictions,
+            num_classes=self.mdl_config.head.num_classes,
+            conf_thre=self.mdl_config.postprocess.confidence_threshold,
+            nms_thre=self.mdl_config.postprocess.nms_threshold)
 
-        loaded_labels_proph, yolox_preds_proph = to_prophesee(obj_labels, pred_processed)
+        loaded_labels_proph, yolox_preds_proph = to_prophesee(
+            obj_labels, pred_processed)
 
         # For visualization, we only use the last item (per batch).
         output = {
-            ObjDetOutput.LABELS_PROPH: loaded_labels_proph[-1],
-            ObjDetOutput.PRED_PROPH: yolox_preds_proph[-1],
-            ObjDetOutput.EV_REPR: ev_repr_selector.get_event_representations_as_list(start_idx=-1)[0],
-            ObjDetOutput.SKIP_VIZ: False,
+            ObjDetOutput.LABELS_PROPH:
+            loaded_labels_proph[-1],
+            ObjDetOutput.PRED_PROPH:
+            yolox_preds_proph[-1],
+            ObjDetOutput.EV_REPR:
+            ev_repr_selector.get_event_representations_as_list(
+                start_idx=-1)[0],
+            ObjDetOutput.SKIP_VIZ:
+            False,
         }
 
         if self.started_training:
@@ -279,7 +332,8 @@ class Module(pl.LightningModule):
 
         return output
 
-    def validation_step(self, batch: Any, batch_idx: int) -> Optional[STEP_OUTPUT]:
+    def validation_step(self, batch: Any,
+                        batch_idx: int) -> Optional[STEP_OUTPUT]:
         return self._val_test_step_impl(batch=batch, mode=Mode.VAL)
 
     def test_step(self, batch: Any, batch_idx: int) -> Optional[STEP_OUTPUT]:
@@ -290,7 +344,9 @@ class Module(pl.LightningModule):
         batch_size = self.mode_2_batch_size[mode]
         hw_tuple = self.mode_2_hw[mode]
         if psee_evaluator is None:
-            warn(f'psee_evaluator is None in {mode=}', UserWarning, stacklevel=2)
+            warn(f'psee_evaluator is None in {mode=}',
+                 UserWarning,
+                 stacklevel=2)
             return
         assert batch_size is not None
         assert hw_tuple is not None
@@ -315,7 +371,11 @@ class Module(pl.LightningModule):
                 # put them on the current device to avoid this error: https://github.com/Lightning-AI/lightning/discussions/2529
                 log_dict[f'{prefix}{k}'] = value.to(self.device)
             # Somehow self.log does not work when we eval during the training epoch.
-            self.log_dict(log_dict, on_step=False, on_epoch=True, batch_size=batch_size, sync_dist=True)
+            self.log_dict(log_dict,
+                          on_step=False,
+                          on_epoch=True,
+                          batch_size=batch_size,
+                          sync_dist=True)
             if dist.is_available() and dist.is_initialized():
                 # We now have to manually sync (average the metrics) across processes in case of distributed training.
                 # NOTE: This is necessary to ensure that we have the same numbers for the checkpoint metric (metadata)
@@ -335,7 +395,9 @@ class Module(pl.LightningModule):
 
             psee_evaluator.reset_buffer()
         else:
-            warn(f'psee_evaluator has not data in {mode=}', UserWarning, stacklevel=2)
+            warn(f'psee_evaluator has not data in {mode=}',
+                 UserWarning,
+                 stacklevel=2)
 
     def on_train_epoch_end(self) -> None:
         mode = Mode.TRAIN
@@ -360,7 +422,9 @@ class Module(pl.LightningModule):
     def configure_optimizers(self) -> Any:
         lr = self.train_config.learning_rate
         weight_decay = self.train_config.weight_decay
-        optimizer = th.optim.AdamW(self.mdl.parameters(), lr=lr, weight_decay=weight_decay)
+        optimizer = th.optim.AdamW(self.mdl.parameters(),
+                                   lr=lr,
+                                   weight_decay=weight_decay)
 
         scheduler_params = self.train_config.lr_scheduler
         if not scheduler_params.use:
@@ -382,11 +446,11 @@ class Module(pl.LightningModule):
             cycle_momentum=False,
             anneal_strategy='linear')
         lr_scheduler_config = {
-            "scheduler": lr_scheduler,
-            "interval": "step",
-            "frequency": 1,
-            "strict": True,
-            "name": 'learning_rate',
+            'scheduler': lr_scheduler,
+            'interval': 'step',
+            'frequency': 1,
+            'strict': True,
+            'name': 'learning_rate',
         }
 
         return {'optimizer': optimizer, 'lr_scheduler': lr_scheduler_config}

@@ -1,4 +1,4 @@
-""" 'Fast' Normalization Functions
+"""'Fast' Normalization Functions.
 
 For GroupNorm and LayerNorm these functions bypass typical AMP upcast to float32.
 
@@ -17,7 +17,6 @@ try:
 except ImportError:
     has_apex = False
 
-
 # fast (ie lower precision LN) can be disabled with this flag if issues crop up
 _USE_FAST_NORM = False  # defaulting to False for now
 
@@ -31,13 +30,11 @@ def set_fast_norm(enable=True):
     _USE_FAST_NORM = enable
 
 
-def fast_group_norm(
-    x: torch.Tensor,
-    num_groups: int,
-    weight: Optional[torch.Tensor] = None,
-    bias: Optional[torch.Tensor] = None,
-    eps: float = 1e-5
-) -> torch.Tensor:
+def fast_group_norm(x: torch.Tensor,
+                    num_groups: int,
+                    weight: Optional[torch.Tensor] = None,
+                    bias: Optional[torch.Tensor] = None,
+                    eps: float = 1e-5) -> torch.Tensor:
     if torch.jit.is_scripting():
         # currently cannot use is_autocast_enabled within torchscript
         return F.group_norm(x, num_groups, weight, bias, eps)
@@ -53,13 +50,11 @@ def fast_group_norm(
         return F.group_norm(x, num_groups, weight, bias, eps)
 
 
-def fast_layer_norm(
-    x: torch.Tensor,
-    normalized_shape: List[int],
-    weight: Optional[torch.Tensor] = None,
-    bias: Optional[torch.Tensor] = None,
-    eps: float = 1e-5
-) -> torch.Tensor:
+def fast_layer_norm(x: torch.Tensor,
+                    normalized_shape: List[int],
+                    weight: Optional[torch.Tensor] = None,
+                    bias: Optional[torch.Tensor] = None,
+                    eps: float = 1e-5) -> torch.Tensor:
     if torch.jit.is_scripting():
         # currently cannot use is_autocast_enabled within torchscript
         return F.layer_norm(x, normalized_shape, weight, bias, eps)

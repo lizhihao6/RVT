@@ -3,16 +3,13 @@ from typing import Any, Iterator, List, Optional, Type
 import torch as th
 import torch.distributed as dist
 from torch.utils.data import DataLoader
-from torchdata.datapipes.iter import (
-    Concater,
-    IterableWrapper,
-    IterDataPipe,
-    Zipper,
-)
+from torchdata.datapipes.iter import (Concater, IterableWrapper, IterDataPipe,
+                                      Zipper)
 from torchdata.datapipes.map import MapDataPipe
 
 
 class DummyIterDataPipe(IterDataPipe):
+
     def __init__(self, source_dp: IterDataPipe):
         super().__init__()
         assert isinstance(source_dp, IterDataPipe)
@@ -60,15 +57,18 @@ class ConcatStreamingDataPipe(IterDataPipe):
         assert isinstance(data, List)
         return (data[idx] for idx in th.randperm(len(data)).tolist())
 
-    def _get_zipped_streams(self, datapipe_list: List[MapDataPipe], batch_size: int):
+    def _get_zipped_streams(self, datapipe_list: List[MapDataPipe],
+                            batch_size: int):
         """Use it only in the iter function of this class!!!
+
         Reason: randomized shuffling must happen within each worker. Otherwise, the same random order will be used
         for all workers.
         """
         assert isinstance(datapipe_list, List)
         assert batch_size > 0
-        streams = Zipper(*(Concater(*(self.augmentation_dp(x.to_iter_datapipe())
-                                      for x in self.random_torch_shuffle_list(datapipe_list)))
+        streams = Zipper(*(Concater(
+            *(self.augmentation_dp(x.to_iter_datapipe())
+              for x in self.random_torch_shuffle_list(datapipe_list)))
                            for _ in range(batch_size)))
         return streams
 
@@ -85,16 +85,17 @@ class ConcatStreamingDataPipe(IterDataPipe):
         global_worker_id = global_rank * local_num_workers + local_worker_id
 
         rnd_number = th.randn(1)
-        print(f'{worker_torch_seed=},\t{global_worker_id=},\t{global_rank=},\t{local_worker_id=},\t{rnd_number=}',
-              flush=True)
+        print(
+            f'{worker_torch_seed=},\t{global_worker_id=},\t{global_rank=},\t{local_worker_id=},\t{rnd_number=}',
+            flush=True)
 
     def _get_zipped_streams_with_worker_id(self):
-        """Use it only in the iter function of this class!!!
-        """
+        """Use it only in the iter function of this class!!!"""
         worker_info = th.utils.data.get_worker_info()
         local_worker_id = 0 if worker_info is None else worker_info.id
         worker_id_stream = IterableWrapper([local_worker_id]).cycle(count=None)
-        zipped_stream = self._get_zipped_streams(datapipe_list=self.datapipe_list, batch_size=self.batch_size)
+        zipped_stream = self._get_zipped_streams(
+            datapipe_list=self.datapipe_list, batch_size=self.batch_size)
         return zipped_stream.zip(worker_id_stream)
 
     def __iter__(self):

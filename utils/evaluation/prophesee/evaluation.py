@@ -13,9 +13,9 @@ def evaluate_list(result_boxes_list,
     assert camera in {'gen1', 'gen4'}
 
     if camera == 'gen1':
-        classes = ("car", "pedestrian")
+        classes = ('car', 'pedestrian')
     elif camera == 'gen4':
-        classes = ("pedestrian", "two-wheeler", "car")
+        classes = ('pedestrian', 'two-wheeler', 'car')
     else:
         raise NotImplementedError
 
@@ -31,12 +31,16 @@ def evaluate_list(result_boxes_list,
             min_box_side //= 2
 
         half_sec_us = int(5e5)
-        filter_boxes_fn = lambda x: filter_boxes(x, half_sec_us, min_box_diag, min_box_side)
+        filter_boxes_fn = lambda x: filter_boxes(x, half_sec_us, min_box_diag,
+                                                 min_box_side)
 
         gt_boxes_list = map(filter_boxes_fn, gt_boxes_list)
         # NOTE: We also filter the prediction to follow the prophesee protocol of evaluation.
         result_boxes_list = map(filter_boxes_fn, result_boxes_list)
 
-    return evaluate_detection(gt_boxes_list, result_boxes_list,
-                              height=height, width=width,
-                              classes=classes, return_aps=return_aps)
+    return evaluate_detection(gt_boxes_list,
+                              result_boxes_list,
+                              height=height,
+                              width=width,
+                              classes=classes,
+                              return_aps=return_aps)

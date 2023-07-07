@@ -9,18 +9,18 @@ try:
 except ImportError:
     th_compile = None
 
-from data.utils.types import FeatureMap, BackboneFeatures, LstmState, LstmStates
+from data.utils.types import (BackboneFeatures, FeatureMap, LstmState,
+                              LstmStates)
+from models.layers.maxvit.maxvit import (PartitionAttentionCl, PartitionType,
+                                         get_downsample_layer_Cf2Cl,
+                                         nhwC_2_nChw)
 from models.layers.rnn import DWSConvLSTM2d
-from models.layers.maxvit.maxvit import (
-    PartitionAttentionCl,
-    nhwC_2_nChw,
-    get_downsample_layer_Cf2Cl,
-    PartitionType)
 
 from .base import BaseDetector
 
 
 class RNNDetector(BaseDetector):
+
     def __init__(self, mdl_config: DictConfig):
         super().__init__()
 
@@ -45,10 +45,14 @@ class RNNDetector(BaseDetector):
         if compile_cfg is not None:
             compile_mdl = compile_cfg.enable
             if compile_mdl and th_compile is not None:
-                compile_args = OmegaConf.to_container(compile_cfg.args, resolve=True, throw_on_missing=True)
+                compile_args = OmegaConf.to_container(compile_cfg.args,
+                                                      resolve=True,
+                                                      throw_on_missing=True)
                 self.forward = th_compile(self.forward, **compile_args)
             elif compile_mdl:
-                print('Could not compile backbone because torch.compile is not available')
+                print(
+                    'Could not compile backbone because torch.compile is not available'
+                )
         ##################################
 
         input_dim = in_channels
@@ -63,13 +67,14 @@ class RNNDetector(BaseDetector):
             spatial_downsample_factor = patch_size if stage_idx == 0 else 2
             stage_dim = self.stage_dims[stage_idx]
             enable_masking_in_stage = enable_masking and stage_idx == 0
-            stage = RNNDetectorStage(dim_in=input_dim,
-                                     stage_dim=stage_dim,
-                                     spatial_downsample_factor=spatial_downsample_factor,
-                                     num_blocks=num_blocks,
-                                     enable_token_masking=enable_masking_in_stage,
-                                     T_max_chrono_init=T_max_chrono_init_stage,
-                                     stage_cfg=mdl_config.stage)
+            stage = RNNDetectorStage(
+                dim_in=input_dim,
+                stage_dim=stage_dim,
+                spatial_downsample_factor=spatial_downsample_factor,
+                num_blocks=num_blocks,
+                enable_token_masking=enable_masking_in_stage,
+                T_max_chrono_init=T_max_chrono_init_stage,
+                stage_cfg=mdl_config.stage)
             stride = stride * spatial_downsample_factor
             self.strides.append(stride)
 
@@ -98,7 +103,8 @@ class RNNDetector(BaseDetector):
         states: LstmStates = list()
         output: Dict[int, FeatureMap] = {}
         for stage_idx, stage in enumerate(self.stages):
-            x, state = stage(x, prev_states[stage_idx], token_mask if stage_idx == 0 else None)
+            x, state = stage(x, prev_states[stage_idx],
+                             token_mask if stage_idx == 0 else None)
             states.append(state)
             stage_number = stage_idx + 1
             output[stage_number] = x
@@ -106,16 +112,16 @@ class RNNDetector(BaseDetector):
 
 
 class MaxVitAttentionPairCl(nn.Module):
-    def __init__(self,
-                 dim: int,
-                 skip_first_norm: bool,
+
+    def __init__(self, dim: int, skip_first_norm: bool,
                  attention_cfg: DictConfig):
         super().__init__()
 
-        self.att_window = PartitionAttentionCl(dim=dim,
-                                               partition_type=PartitionType.WINDOW,
-                                               attention_cfg=attention_cfg,
-                                               skip_first_norm=skip_first_norm)
+        self.att_window = PartitionAttentionCl(
+            dim=dim,
+            partition_type=PartitionType.WINDOW,
+            attention_cfg=attention_cfg,
+            skip_first_norm=skip_first_norm)
         self.att_grid = PartitionAttentionCl(dim=dim,
                                              partition_type=PartitionType.GRID,
                                              attention_cfg=attention_cfg,
@@ -128,16 +134,11 @@ class MaxVitAttentionPairCl(nn.Module):
 
 
 class RNNDetectorStage(nn.Module):
-    """Operates with NCHW [channel-first] format as input and output.
-    """
+    """Operates with NCHW [channel-first] format as input and output."""
 
-    def __init__(self,
-                 dim_in: int,
-                 stage_dim: int,
-                 spatial_downsample_factor: int,
-                 num_blocks: int,
-                 enable_token_masking: bool,
-                 T_max_chrono_init: Optional[int],
+    def __init__(self, dim_in: int, stage_dim: int,
+                 spatial_downsample_factor: int, num_blocks: int,
+                 enable_token_masking: bool, T_max_chrono_init: Optional[int],
                  stage_cfg: DictConfig):
         super().__init__()
         assert isinstance(num_blocks, int) and num_blocks > 0
@@ -145,23 +146,30 @@ class RNNDetectorStage(nn.Module):
         lstm_cfg = stage_cfg.lstm
         attention_cfg = stage_cfg.attention
 
-        self.downsample_cf2cl = get_downsample_layer_Cf2Cl(dim_in=dim_in,
-                                                           dim_out=stage_dim,
-                                                           downsample_factor=spatial_downsample_factor,
-                                                           downsample_cfg=downsample_cfg)
-        blocks = [MaxVitAttentionPairCl(dim=stage_dim,
-                                        skip_first_norm=i == 0 and self.downsample_cf2cl.output_is_normed(),
-                                        attention_cfg=attention_cfg) for i in range(num_blocks)]
+        self.downsample_cf2cl = get_downsample_layer_Cf2Cl(
+            dim_in=dim_in,
+            dim_out=stage_dim,
+            downsample_factor=spatial_downsample_factor,
+            downsample_cfg=downsample_cfg)
+        blocks = [
+            MaxVitAttentionPairCl(dim=stage_dim,
+                                  skip_first_norm=i == 0
+                                  and self.downsample_cf2cl.output_is_normed(),
+                                  attention_cfg=attention_cfg)
+            for i in range(num_blocks)
+        ]
         self.att_blocks = nn.ModuleList(blocks)
-        self.lstm = DWSConvLSTM2d(dim=stage_dim,
-                                  dws_conv=lstm_cfg.dws_conv,
-                                  dws_conv_only_hidden=lstm_cfg.dws_conv_only_hidden,
-                                  dws_conv_kernel_size=lstm_cfg.dws_conv_kernel_size,
-                                  cell_update_dropout=lstm_cfg.get('drop_cell_update', 0))
+        self.lstm = DWSConvLSTM2d(
+            dim=stage_dim,
+            dws_conv=lstm_cfg.dws_conv,
+            dws_conv_only_hidden=lstm_cfg.dws_conv_only_hidden,
+            dws_conv_kernel_size=lstm_cfg.dws_conv_kernel_size,
+            cell_update_dropout=lstm_cfg.get('drop_cell_update', 0))
 
         ###### Mask Token ################
-        self.mask_token = nn.Parameter(th.zeros(1, 1, 1, stage_dim),
-                                       requires_grad=True) if enable_token_masking else None
+        self.mask_token = nn.Parameter(
+            th.zeros(1, 1, 1, stage_dim),
+            requires_grad=True) if enable_token_masking else None
         if self.mask_token is not None:
             th.nn.init.normal_(self.mask_token, std=.02)
         ##################################

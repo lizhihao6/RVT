@@ -5,8 +5,8 @@ import torch.nn as nn
 
 
 class DWSConvLSTM2d(nn.Module):
-    """LSTM with (depthwise-separable) Conv option in NCHW [channel-first] format.
-    """
+    """LSTM with (depthwise-separable) Conv option in NCHW [channel-first]
+    format."""
 
     def __init__(self,
                  dim: int,
@@ -22,11 +22,12 @@ class DWSConvLSTM2d(nn.Module):
         xh_dim = dim * 2
         gates_dim = dim * 4
         conv3x3_dws_dim = dim if dws_conv_only_hidden else xh_dim
-        self.conv3x3_dws = nn.Conv2d(in_channels=conv3x3_dws_dim,
-                                     out_channels=conv3x3_dws_dim,
-                                     kernel_size=dws_conv_kernel_size,
-                                     padding=dws_conv_kernel_size // 2,
-                                     groups=conv3x3_dws_dim) if dws_conv else nn.Identity()
+        self.conv3x3_dws = nn.Conv2d(
+            in_channels=conv3x3_dws_dim,
+            out_channels=conv3x3_dws_dim,
+            kernel_size=dws_conv_kernel_size,
+            padding=dws_conv_kernel_size // 2,
+            groups=conv3x3_dws_dim) if dws_conv else nn.Identity()
         self.conv1x1 = nn.Conv2d(in_channels=xh_dim,
                                  out_channels=gates_dim,
                                  kernel_size=1)

@@ -1,30 +1,30 @@
 import os
 
-os.environ["OMP_NUM_THREADS"] = "1"
-os.environ["OPENBLAS_NUM_THREADS"] = "1"
-os.environ["MKL_NUM_THREADS"] = "1"
-os.environ["VECLIB_MAXIMUM_THREADS"] = "1"
-os.environ["NUMEXPR_NUM_THREADS"] = "1"
+os.environ['OMP_NUM_THREADS'] = '1'
+os.environ['OPENBLAS_NUM_THREADS'] = '1'
+os.environ['MKL_NUM_THREADS'] = '1'
+os.environ['VECLIB_MAXIMUM_THREADS'] = '1'
+os.environ['NUMEXPR_NUM_THREADS'] = '1'
 
-from abc import ABC, abstractmethod
 import argparse
+import shutil
+import sys
+from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from enum import Enum, auto
 from functools import partial
 from multiprocessing import get_context
 from pathlib import Path
-import shutil
-import sys
 
 sys.path.append('../..')
-from typing import Any, Dict, List, Optional, Tuple, Union
 import weakref
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import h5py
-from numba import jit
 import numpy as np
-from omegaconf import OmegaConf, DictConfig, MISSING
 import torch
+from numba import jit
+from omegaconf import MISSING, DictConfig, OmegaConf
 from tqdm import tqdm
 
 from data.utils.representations import EventSurface, RepresentationBase
@@ -69,6 +69,7 @@ class NoLabelsException(Exception):
 
 
 class H5Writer:
+
     def __init__(self, outfile: Path):
         self.h5f = h5py.File(str(outfile), 'w')
         self._finalizer = weakref.finalize(self, self.close_callback, self.h5f)
@@ -78,35 +79,43 @@ class H5Writer:
         chunkshape = (1, 2)
         self.pos_key = 'pos'
         self.pos_dtype = np.uint16
-        self.h5f.create_dataset(self.pos_key, dtype=self.pos_dtype,
-                                shape=chunkshape, chunks=chunkshape,
+        self.h5f.create_dataset(self.pos_key,
+                                dtype=self.pos_dtype,
+                                shape=chunkshape,
+                                chunks=chunkshape,
                                 maxshape=maxshape)
-        
+
         # create hdf5 datasets for time
-        maxshape = (None,)
-        chunkshape = (1,)
+        maxshape = (None, )
+        chunkshape = (1, )
         self.time_key = 'time'
         self.time_dtype = np.uint32
-        self.h5f.create_dataset(self.time_key, dtype=self.time_dtype,
-                                shape=chunkshape, chunks=chunkshape,
+        self.h5f.create_dataset(self.time_key,
+                                dtype=self.time_dtype,
+                                shape=chunkshape,
+                                chunks=chunkshape,
                                 maxshape=maxshape)
-        
+
         # create hdf5 datasets for polarity
-        maxshape = (None,)
-        chunkshape = (1,)
+        maxshape = (None, )
+        chunkshape = (1, )
         self.events_key = 'events'
         self.events_dtype = np.bool_
-        self.h5f.create_dataset(self.events_key, dtype=self.events_dtype,
-                                shape=chunkshape, chunks=chunkshape,
+        self.h5f.create_dataset(self.events_key,
+                                dtype=self.events_dtype,
+                                shape=chunkshape,
+                                chunks=chunkshape,
                                 maxshape=maxshape)
-        
+
         # create frame_idx, start and stop indices
         maxshape = (None, 3)
         chunkshape = (1, 3)
         self.indices_key = 'indices'
-        self.indices_dtype = np.uint32
-        self.h5f.create_dataset(self.indices_key, dtype=self.indices_dtype,
-                                shape=chunkshape, chunks=chunkshape,
+        self.indices_dtype = np.float32
+        self.h5f.create_dataset(self.indices_key,
+                                dtype=self.indices_dtype,
+                                shape=chunkshape,
+                                chunks=chunkshape,
                                 maxshape=maxshape)
 
         self.t_idx = 0
@@ -130,6 +139,11 @@ class H5Writer:
         time = xytp[:, 2].astype(self.time_dtype)
         events = xytp[:, 3].astype(self.events_dtype)
 
+        # normalize time
+        min_time, max_time = time.min(), time.max()
+        time = (time - min_time).astype(
+            self.time_dtype) / (max_time - min_time)
+
         new_size = self.t_idx + xytp.shape[0]
 
         self.h5f[self.pos_key].resize(new_size, axis=0)
@@ -141,21 +155,25 @@ class H5Writer:
         self.h5f[self.events_key].resize(new_size, axis=0)
         self.h5f[self.events_key][self.t_idx:new_size] = events
 
-        self.h5f[self.indices_key].resize(self.counter+1, axis=0)
-        self.h5f[self.indices_key][self.counter] = [seq_idx, self.t_idx, new_size]
+        self.h5f[self.indices_key].resize(self.counter + 1, axis=0)
+        self.h5f[self.indices_key][self.counter] = [
+            seq_idx, self.t_idx, new_size
+        ]
 
         self.t_idx = new_size
         self.counter += 1
 
 
 class H5Reader:
+
     def __init__(self, h5_file: Path, dataset: str = 'gen4'):
         assert h5_file.exists()
         assert h5_file.suffix == '.h5'
         assert dataset in {'gen1', 'gen4'}
 
         self.h5f = h5py.File(str(h5_file), 'r')
-        self._finalizer = weakref.finalize(self, self._close_callback, self.h5f)
+        self._finalizer = weakref.finalize(self, self._close_callback,
+                                           self.h5f)
         self.is_open = True
 
         try:
@@ -205,7 +223,10 @@ class H5Reader:
             else:
                 time_last = time
 
-    def get_event_slice(self, idx_start: int, idx_end: int, convert_2_torch: bool = True):
+    def get_event_slice(self,
+                        idx_start: int,
+                        idx_end: int,
+                        convert_2_torch: bool = True):
         assert self.is_open
         assert idx_end >= idx_start
         ev_data = self.h5f['events']
@@ -237,7 +258,7 @@ def prophesee_bbox_filter(labels: np.ndarray, dataset_type: str) -> np.ndarray:
     w_lbl = labels['w']
     h_lbl = labels['h']
 
-    diag_ok = w_lbl ** 2 + h_lbl ** 2 >= min_box_diag ** 2
+    diag_ok = w_lbl**2 + h_lbl**2 >= min_box_diag**2
     side_ok = (w_lbl >= min_box_side) & (h_lbl >= min_box_side)
     keep = diag_ok & side_ok
     labels = labels[keep]
@@ -253,8 +274,10 @@ def conservative_bbox_filter(labels: np.ndarray) -> np.ndarray:
     return labels
 
 
-def remove_faulty_huge_bbox_filter(labels: np.ndarray, dataset_type: str) -> np.ndarray:
-    """There are some labels which span the frame horizontally without actually covering an object."""
+def remove_faulty_huge_bbox_filter(labels: np.ndarray,
+                                   dataset_type: str) -> np.ndarray:
+    """There are some labels which span the frame horizontally without actually
+    covering an object."""
     assert dataset_type in {'gen1', 'gen4'}
     w_lbl = labels['w']
     max_width = (9 * dataset_2_width[dataset_type]) // 10
@@ -314,15 +337,18 @@ def apply_filters(labels: np.ndarray,
         labels = prophesee_remove_labels_filter_gen4(labels=labels)
     labels = crop_to_fov_filter(labels=labels, dataset_type=dataset_type)
     if filter_cfg.apply_psee_bbox_filter:
-        labels = prophesee_bbox_filter(labels=labels, dataset_type=dataset_type)
+        labels = prophesee_bbox_filter(labels=labels,
+                                       dataset_type=dataset_type)
     else:
         labels = conservative_bbox_filter(labels=labels)
     if split_type == SplitType.TRAIN and filter_cfg.apply_faulty_bbox_filter:
-        labels = remove_faulty_huge_bbox_filter(labels=labels, dataset_type=dataset_type)
+        labels = remove_faulty_huge_bbox_filter(labels=labels,
+                                                dataset_type=dataset_type)
     return labels
 
 
-def get_base_delta_ts_for_labels_us(unique_label_ts_us: np.ndarray, dataset_type: str = 'gen1') -> int:
+def get_base_delta_ts_for_labels_us(unique_label_ts_us: np.ndarray,
+                                    dataset_type: str = 'gen1') -> int:
     if dataset_type == 'gen1':
         delta_t_us_4hz = 250000
         return delta_t_us_4hz
@@ -330,10 +356,11 @@ def get_base_delta_ts_for_labels_us(unique_label_ts_us: np.ndarray, dataset_type
     diff_us = np.diff(unique_label_ts_us)
     median_diff_us = np.median(diff_us)
 
-    hz = int(np.rint(10 ** 6 / median_diff_us))
+    hz = int(np.rint(10**6 / median_diff_us))
     assert hz in {30, 60}, f'{hz=} but should be either 30 or 60'
 
-    delta_t_us_approx_10hz = int(6 * median_diff_us if hz == 60 else 3 * median_diff_us)
+    delta_t_us_approx_10hz = int(6 * median_diff_us if hz == 60 else 3 *
+                                 median_diff_us)
     return delta_t_us_approx_10hz
 
 
@@ -348,13 +375,15 @@ def save_labels(out_labels_dir: Path,
     objframe_idx_2_label_idx = list()
     start_idx = 0
     _frame_timestamps_us = list()
-    for frame_idx, (labels, timestamp) in enumerate(zip(labels_per_frame, frame_timestamps_us)):
+    for frame_idx, (labels, timestamp) in enumerate(
+            zip(labels_per_frame, frame_timestamps_us)):
         if paired_frame_mask[frame_idx] > 0:
             objframe_idx_2_label_idx.append(start_idx)
             labels_v2.append(labels)
             start_idx += len(labels)
             _frame_timestamps_us.append(timestamp)
-    frame_timestamps_us = np.asarray(_frame_timestamps_us, dtype=frame_timestamps_us.dtype)
+    frame_timestamps_us = np.asarray(_frame_timestamps_us,
+                                     dtype=frame_timestamps_us.dtype)
     assert len(labels_v2) == len(objframe_idx_2_label_idx)
     labels_v2 = np.concatenate(labels_v2)
 
@@ -366,22 +395,22 @@ def save_labels(out_labels_dir: Path,
         oi_2_li_existing = data_existing['objframe_idx_2_label_idx']
         assert np.array_equal(oi_2_li_existing, objframe_idx_2_label_idx)
     else:
-        np.savez(str(outfile_labels), labels=labels_v2, objframe_idx_2_label_idx=objframe_idx_2_label_idx)
+        np.savez(str(outfile_labels),
+                 labels=labels_v2,
+                 objframe_idx_2_label_idx=objframe_idx_2_label_idx)
 
     out_labels_ts_file = out_labels_dir / 'timestamps_us.npy'
     if out_labels_ts_file.exists() and match_if_exists:
         frame_timestamps_us_existing = np.load(str(out_labels_ts_file))
-        assert np.array_equal(frame_timestamps_us_existing, frame_timestamps_us)
+        assert np.array_equal(frame_timestamps_us_existing,
+                              frame_timestamps_us)
     else:
         np.save(str(out_labels_ts_file), frame_timestamps_us)
 
 
-def labels_and_ev_repr_timestamps(npy_file: Path,
-                                  split_type: SplitType,
-                                  filter_cfg: DictConfig,
-                                  align_t_ms: int,
-                                  ts_step_ev_repr_ms: int,
-                                  dataset_type: str):
+def labels_and_ev_repr_timestamps(npy_file: Path, split_type: SplitType,
+                                  filter_cfg: DictConfig, align_t_ms: int,
+                                  ts_step_ev_repr_ms: int, dataset_type: str):
     assert npy_file.exists()
     assert npy_file.suffix == '.npy'
     ts_step_frame_ms = 100
@@ -407,7 +436,9 @@ def labels_and_ev_repr_timestamps(npy_file: Path,
         unique_label_ts_us=unique_ts_us, dataset_type=dataset_type)
 
     # We extract the first label at or after align_t_us to keep it as the reference for the label extraction.
-    unique_ts_idx_first = np.searchsorted(unique_ts_us, align_t_us, side='left')
+    unique_ts_idx_first = np.searchsorted(unique_ts_us,
+                                          align_t_us,
+                                          side='left')
 
     # Extract "frame" timestamps from labels and prepare ev repr ts computation
     num_ev_reprs_between_frame_ts = list()
@@ -422,31 +453,44 @@ def labels_and_ev_repr_timestamps(npy_file: Path,
             assert base_delta_count > 0
             # We accept up to 2 millisecond of jitter
             frame_timestamps_us.append(ts)
-            num_ev_reprs_between_frame_ts.append(base_delta_count * (ts_step_frame_ms // ts_step_ev_repr_ms))
+            num_ev_reprs_between_frame_ts.append(
+                base_delta_count * (ts_step_frame_ms // ts_step_ev_repr_ms))
     frame_timestamps_us = np.asarray(frame_timestamps_us, dtype='int64')
     assert len(frame_timestamps_us) > 0, f'{npy_file=}'
 
-    start_indices_per_label = np.searchsorted(sequence_labels['t'], frame_timestamps_us, side='left')
-    end_indices_per_label = np.searchsorted(sequence_labels['t'], frame_timestamps_us, side='right')
+    start_indices_per_label = np.searchsorted(sequence_labels['t'],
+                                              frame_timestamps_us,
+                                              side='left')
+    end_indices_per_label = np.searchsorted(sequence_labels['t'],
+                                            frame_timestamps_us,
+                                            side='right')
 
     # Create labels per "frame"
     labels_per_frame = list()
-    for idx_start, idx_end in zip(start_indices_per_label, end_indices_per_label):
+    for idx_start, idx_end in zip(start_indices_per_label,
+                                  end_indices_per_label):
         labels = sequence_labels[idx_start:idx_end]
         label_time_us = labels['t'][0]
         assert np.all(labels['t'] == label_time_us)
         labels_per_frame.append(labels)
 
     if len(frame_timestamps_us) > 1:
-        assert np.diff(frame_timestamps_us).min() > 98000, f'{np.diff(frame_timestamps_us).min()=}'
+        assert np.diff(frame_timestamps_us).min(
+        ) > 98000, f'{np.diff(frame_timestamps_us).min()=}'
 
     # Event repr timestamps generation
-    ev_repr_timestamps_us_end = list(reversed(range(frame_timestamps_us[0], 0, -delta_t_us)))[1:-1]
+    ev_repr_timestamps_us_end = list(
+        reversed(range(frame_timestamps_us[0], 0, -delta_t_us)))[1:-1]
     assert len(num_ev_reprs_between_frame_ts) == len(
-        frame_timestamps_us) - 1, f'{len(num_ev_reprs_between_frame_ts)=}, {len(frame_timestamps_us)=}'
-    for idx, (num_ev_repr_between, frame_ts_us_start, frame_ts_us_end) in enumerate(zip(
-            num_ev_reprs_between_frame_ts, frame_timestamps_us[:-1], frame_timestamps_us[1:])):
-        new_edge_timestamps = np.asarray(np.linspace(frame_ts_us_start, frame_ts_us_end, num_ev_repr_between + 1),
+        frame_timestamps_us
+    ) - 1, f'{len(num_ev_reprs_between_frame_ts)=}, {len(frame_timestamps_us)=}'
+    for idx, (num_ev_repr_between, frame_ts_us_start,
+              frame_ts_us_end) in enumerate(
+                  zip(num_ev_reprs_between_frame_ts, frame_timestamps_us[:-1],
+                      frame_timestamps_us[1:])):
+        new_edge_timestamps = np.asarray(np.linspace(frame_ts_us_start,
+                                                     frame_ts_us_end,
+                                                     num_ev_repr_between + 1),
                                          dtype='int64').tolist()
         is_last_iter = idx == len(num_ev_reprs_between_frame_ts) - 1
         if not is_last_iter:
@@ -456,40 +500,43 @@ def labels_and_ev_repr_timestamps(npy_file: Path,
         # special case not handled in above for loop (no iter in this case)
         # yes, it's hacky ...
         ev_repr_timestamps_us_end.append(frame_timestamps_us[0])
-    ev_repr_timestamps_us_end = np.asarray(ev_repr_timestamps_us_end, dtype='int64')
+    ev_repr_timestamps_us_end = np.asarray(ev_repr_timestamps_us_end,
+                                           dtype='int64')
 
-    frameidx_2_repridx = np.searchsorted(ev_repr_timestamps_us_end, frame_timestamps_us, side='left')
+    frameidx_2_repridx = np.searchsorted(ev_repr_timestamps_us_end,
+                                         frame_timestamps_us,
+                                         side='left')
     assert len(frameidx_2_repridx) == len(frame_timestamps_us)
 
     # Some sanity checks:
     assert len(labels_per_frame) == len(frame_timestamps_us)
     assert len(frame_timestamps_us) == len(frameidx_2_repridx)
-    for label, frame_ts_us, repr_idx in zip(labels_per_frame, frame_timestamps_us, frameidx_2_repridx):
+    for label, frame_ts_us, repr_idx in zip(labels_per_frame,
+                                            frame_timestamps_us,
+                                            frameidx_2_repridx):
         assert label['t'][0] == frame_ts_us
         assert frame_ts_us == ev_repr_timestamps_us_end[repr_idx]
 
     return labels_per_frame, frame_timestamps_us, ev_repr_timestamps_us_end, frameidx_2_repridx
 
 
-def write_event_data(in_h5_file: Path,
-                     ev_out_dir: Path,
-                     dataset: str,
+def write_event_data(in_h5_file: Path, ev_out_dir: Path, dataset: str,
                      event_representation: RepresentationBase,
                      ev_repr_num_events: Optional[int],
                      ev_repr_delta_ts_ms: Optional[int],
-                     ev_repr_timestamps_us: np.ndarray,
-                     downsample_by_2: bool,
+                     ev_repr_timestamps_us: np.ndarray, downsample_by_2: bool,
                      frameidx2repridx: np.ndarray) -> np.ndarray:
-    _frameidx2repridx = write_event_representations(in_h5_file=in_h5_file,
-                                                    ev_out_dir=ev_out_dir,
-                                                    dataset=dataset,
-                                                    event_representation=event_representation,
-                                                    ev_repr_num_events=ev_repr_num_events,
-                                                    ev_repr_delta_ts_ms=ev_repr_delta_ts_ms,
-                                                    ev_repr_timestamps_us=ev_repr_timestamps_us,
-                                                    frameidx2repridx=frameidx2repridx,
-                                                    downsample_by_2=downsample_by_2,
-                                                    overwrite_if_exists=False)
+    _frameidx2repridx = write_event_representations(
+        in_h5_file=in_h5_file,
+        ev_out_dir=ev_out_dir,
+        dataset=dataset,
+        event_representation=event_representation,
+        ev_repr_num_events=ev_repr_num_events,
+        ev_repr_delta_ts_ms=ev_repr_delta_ts_ms,
+        ev_repr_timestamps_us=ev_repr_timestamps_us,
+        frameidx2repridx=frameidx2repridx,
+        downsample_by_2=downsample_by_2,
+        overwrite_if_exists=False)
 
     # regenerate frameidx2repridx
     frameidx2repridx = _frameidx2repridx[_frameidx2repridx > 0]
@@ -523,27 +570,31 @@ def downsample_ev_repr(x: torch.Tensor, scale_factor: float):
     if orig_dtype == torch.int8:
         x = torch.asarray(x, dtype=torch.int16)
         x = torch.asarray(x + 128, dtype=torch.uint8)
-    x = torch.nn.functional.interpolate(x, scale_factor=scale_factor, mode='nearest-exact')
+    x = torch.nn.functional.interpolate(x,
+                                        scale_factor=scale_factor,
+                                        mode='nearest-exact')
     if orig_dtype == torch.int8:
         x = torch.asarray(x, dtype=torch.int16)
         x = torch.asarray(x - 128, dtype=torch.int8)
     return x
 
 
-def write_event_representations(in_h5_file: Path,
-                                ev_out_dir: Path,
-                                dataset: str,
-                                event_representation: RepresentationBase,
-                                ev_repr_num_events: Optional[int],
-                                ev_repr_delta_ts_ms: Optional[int],
-                                ev_repr_timestamps_us: np.ndarray,
-                                frameidx2repridx: np.ndarray,
-                                downsample_by_2: bool,
-                                overwrite_if_exists: bool = False) -> np.ndarray:
+def write_event_representations(
+        in_h5_file: Path,
+        ev_out_dir: Path,
+        dataset: str,
+        event_representation: RepresentationBase,
+        ev_repr_num_events: Optional[int],
+        ev_repr_delta_ts_ms: Optional[int],
+        ev_repr_timestamps_us: np.ndarray,
+        frameidx2repridx: np.ndarray,
+        downsample_by_2: bool,
+        overwrite_if_exists: bool = False) -> np.ndarray:
     ev_outfile = ev_out_dir / f"event_representations{'_ds2_nearest' if downsample_by_2 else ''}.h5"
     if ev_outfile.exists() and not overwrite_if_exists:
         return
-    ev_outfile_in_progress = ev_outfile.parent / (ev_outfile.stem + '_in_progress' + ev_outfile.suffix)
+    ev_outfile_in_progress = ev_outfile.parent / (
+        ev_outfile.stem + '_in_progress' + ev_outfile.suffix)
     if ev_outfile_in_progress.exists():
         os.remove(ev_outfile_in_progress)
     if downsample_by_2:
@@ -552,16 +603,23 @@ def write_event_representations(in_h5_file: Path,
             H5Writer(ev_outfile_in_progress) as h5_writer:
         ev_ts_us = h5_reader.time
 
-        end_indices = np.searchsorted(ev_ts_us, ev_repr_timestamps_us, side='right')
+        end_indices = np.searchsorted(ev_ts_us,
+                                      ev_repr_timestamps_us,
+                                      side='right')
         if ev_repr_num_events is not None:
             start_indices = np.maximum(end_indices - ev_repr_num_events, 0)
         else:
             assert ev_repr_delta_ts_ms is not None
-            start_indices = np.searchsorted(ev_ts_us, ev_repr_timestamps_us - ev_repr_delta_ts_ms * 1000, side='left')
+            start_indices = np.searchsorted(ev_ts_us,
+                                            ev_repr_timestamps_us -
+                                            ev_repr_delta_ts_ms * 1000,
+                                            side='left')
 
         _frameidx2repridx = np.zeros_like(frameidx2repridx)
-        for seq_idx, (idx_start, idx_end) in enumerate(zip(start_indices, end_indices)):
-            ev_window = h5_reader.get_event_slice(idx_start=idx_start, idx_end=idx_end)
+        for seq_idx, (idx_start,
+                      idx_end) in enumerate(zip(start_indices, end_indices)):
+            ev_window = h5_reader.get_event_slice(idx_start=idx_start,
+                                                  idx_end=idx_end)
 
             # sometimes there are no events in the window
             if ev_window['x'].shape[0] == 0:
@@ -583,18 +641,16 @@ def write_event_representations(in_h5_file: Path,
             h5_writer.add_data(ev_repr_numpy, seq_idx)
             frame_idx = np.searchsorted(frameidx2repridx, seq_idx, side='left')
             _frameidx2repridx[frame_idx] += 1
-    assert seq_idx == len(ev_repr_timestamps_us)-1
+    assert seq_idx == len(ev_repr_timestamps_us) - 1
     os.rename(ev_outfile_in_progress, ev_outfile)
     return _frameidx2repridx
 
 
-def process_sequence(dataset: str,
-                     filter_cfg: DictConfig,
+def process_sequence(dataset: str, filter_cfg: DictConfig,
                      event_representation: RepresentationBase,
                      ev_repr_num_events: Optional[int],
                      ev_repr_delta_ts_ms: Optional[int],
-                     ts_step_ev_repr_ms: int,
-                     downsample_by_2: bool,
+                     ts_step_ev_repr_ms: int, downsample_by_2: bool,
                      sequence_data: Dict[DataKeys, Union[Path, SplitType]]):
     in_npy_file = sequence_data[DataKeys.InNPY]
     in_h5_file = sequence_data[DataKeys.InH5]
@@ -624,21 +680,23 @@ def process_sequence(dataset: str,
         return
 
     # 2) retrieve event data, compute event representations and save them
-    paired_frame_mask = write_event_data(in_h5_file=in_h5_file,
-                                         ev_out_dir=out_ev_repr_dir,
-                                         dataset=dataset,
-                                         event_representation=event_representation,
-                                         ev_repr_num_events=ev_repr_num_events,
-                                         ev_repr_delta_ts_ms=ev_repr_delta_ts_ms,
-                                         ev_repr_timestamps_us=ev_repr_timestamps_us,
-                                         downsample_by_2=downsample_by_2,
-                                         frameidx2repridx=frameidx2repridx)
+    paired_frame_mask = write_event_data(
+        in_h5_file=in_h5_file,
+        ev_out_dir=out_ev_repr_dir,
+        dataset=dataset,
+        event_representation=event_representation,
+        ev_repr_num_events=ev_repr_num_events,
+        ev_repr_delta_ts_ms=ev_repr_delta_ts_ms,
+        ev_repr_timestamps_us=ev_repr_timestamps_us,
+        downsample_by_2=downsample_by_2,
+        frameidx2repridx=frameidx2repridx)
 
     # 3) clean and save labels: labels_per_frame, frame_timestamps_us
     save_labels(out_labels_dir=out_labels_dir,
                 labels_per_frame=labels_per_frame,
                 paired_frame_mask=paired_frame_mask,
                 frame_timestamps_us=frame_timestamps_us)
+
 
 class AggregationType(Enum):
     COUNT = auto()
@@ -664,6 +722,7 @@ class EventWindowExtractionConf:
 
 
 class EventRepresentationFactory(ABC):
+
     def __init__(self, config: DictConfig):
         self.config = config
 
@@ -678,6 +737,7 @@ class EventRepresentationFactory(ABC):
 
 
 class EventSurfaceFactory(EventRepresentationFactory):
+
     @property
     def name(self) -> str:
         extraction = self.config.event_window_extraction
@@ -692,11 +752,13 @@ name_2_ev_repr_factory = {
 }
 
 
-def get_configuration(ev_repr_yaml_config: Path, extraction_yaml_config: Path) -> DictConfig:
+def get_configuration(ev_repr_yaml_config: Path,
+                      extraction_yaml_config: Path) -> DictConfig:
     config = OmegaConf.load(ev_repr_yaml_config)
     event_window_extraction_config = OmegaConf.load(extraction_yaml_config)
-    event_window_extraction_config = OmegaConf.merge(OmegaConf.structured(EventWindowExtractionConf),
-                                                     event_window_extraction_config)
+    event_window_extraction_config = OmegaConf.merge(
+        OmegaConf.structured(EventWindowExtractionConf),
+        event_window_extraction_config)
     config.event_window_extraction = event_window_extraction_config
     return config
 
@@ -705,11 +767,22 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('input_dir')
     parser.add_argument('target_dir')
-    parser.add_argument('ev_repr_yaml_config', help='Path to event representation yaml config file')
-    parser.add_argument('extraction_yaml_config', help='Path to event window extraction yaml config file')
-    parser.add_argument('bbox_filter_yaml_config', help='Path to bbox filter yaml config file')
-    parser.add_argument('-ds', '--dataset', default='gen1', help='gen1 or gen4')
-    parser.add_argument('-np', '--num_processes', type=int, default=1, help="Num proceesses to run in parallel")
+    parser.add_argument('ev_repr_yaml_config',
+                        help='Path to event representation yaml config file')
+    parser.add_argument(
+        'extraction_yaml_config',
+        help='Path to event window extraction yaml config file')
+    parser.add_argument('bbox_filter_yaml_config',
+                        help='Path to bbox filter yaml config file')
+    parser.add_argument('-ds',
+                        '--dataset',
+                        default='gen1',
+                        help='gen1 or gen4')
+    parser.add_argument('-np',
+                        '--num_processes',
+                        type=int,
+                        default=1,
+                        help='Num proceesses to run in parallel')
     args = parser.parse_args()
 
     num_processes = args.num_processes
@@ -718,8 +791,9 @@ if __name__ == '__main__':
     assert dataset in ('gen1', 'gen4')
     downsample_by_2 = True if dataset == 'gen4' else False
 
-    config = get_configuration(ev_repr_yaml_config=Path(args.ev_repr_yaml_config),
-                               extraction_yaml_config=Path(args.extraction_yaml_config))
+    config = get_configuration(
+        ev_repr_yaml_config=Path(args.ev_repr_yaml_config),
+        extraction_yaml_config=Path(args.extraction_yaml_config))
 
     bbox_filter_yaml_config = Path(args.bbox_filter_yaml_config)
     assert bbox_filter_yaml_config.exists()
@@ -729,7 +803,8 @@ if __name__ == '__main__':
     print('')
     print(OmegaConf.to_yaml(config))
 
-    ev_repr_factory: EventRepresentationFactory = name_2_ev_repr_factory[config.name](config)
+    ev_repr_factory: EventRepresentationFactory = name_2_ev_repr_factory[
+        config.name](config)
     height = dataset_2_height[args.dataset]
     width = dataset_2_width[args.dataset]
     ev_repr = ev_repr_factory.create(height=height, width=width)
@@ -754,7 +829,8 @@ if __name__ == '__main__':
             if npy_file.suffix != '.npy':
                 continue
             h5f_path = npy_file.parent / (
-                    npy_file.stem.split('bbox')[0] + f"td{'.dat' if dataset == 'gen1' else ''}.h5")
+                npy_file.stem.split('bbox')[0] +
+                f"td{'.dat' if dataset == 'gen1' else ''}.h5")
             assert h5f_path.exists(), f'{h5f_path=}'
 
             dir_name = npy_file.stem.split('_bbox')[0]
@@ -789,17 +865,14 @@ if __name__ == '__main__':
 
     if num_processes > 1:
         chunksize = 1
-        func = partial(process_sequence,
-                       dataset,
-                       filter_cfg,
-                       ev_repr,
-                       ev_repr_num_events,
-                       ev_repr_delta_ts_ms,
-                       ts_step_ev_repr_ms,
-                       downsample_by_2)
+        func = partial(process_sequence, dataset, filter_cfg, ev_repr,
+                       ev_repr_num_events, ev_repr_delta_ts_ms,
+                       ts_step_ev_repr_ms, downsample_by_2)
         with get_context('spawn').Pool(num_processes) as pool:
             with tqdm(total=len(seq_data_list), desc='sequences') as pbar:
-                for _ in pool.imap_unordered(func, iterable=seq_data_list, chunksize=chunksize):
+                for _ in pool.imap_unordered(func,
+                                             iterable=seq_data_list,
+                                             chunksize=chunksize):
                     pbar.update()
     else:
         for entry in tqdm(seq_data_list, desc='sequences'):

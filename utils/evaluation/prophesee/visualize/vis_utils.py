@@ -8,16 +8,16 @@ import bbox_visualizer as bbv
 import cv2
 import numpy as np
 
-LABELMAP_GEN1 = ("car", "pedestrian")
-LABELMAP_GEN4 = ('pedestrian', 'two wheeler', 'car', 'truck', 'bus', 'traffic sign', 'traffic light')
+LABELMAP_GEN1 = ('car', 'pedestrian')
+LABELMAP_GEN4 = ('pedestrian', 'two wheeler', 'car', 'truck', 'bus',
+                 'traffic sign', 'traffic light')
 LABELMAP_GEN4_SHORT = ('pedestrian', 'two wheeler', 'car')
 
 
 def make_binary_histo(events, img=None, width=304, height=240):
-    """
-    simple display function that shows negative events as blacks dots and positive as white one
-    on a gray background
-    args :
+    """simple display function that shows negative events as blacks dots and
+    positive as white one on a gray background args :
+
         - events structured numpy array
         - img (numpy array, height x width x 3) optional array to paint event on.
         - width int
@@ -31,18 +31,21 @@ def make_binary_histo(events, img=None, width=304, height=240):
         # if an array was already allocated just paint it grey
         img[...] = 127
     if events.size:
-        assert events['x'].max() < width, "out of bound events: x = {}, w = {}".format(events['x'].max(), width)
-        assert events['y'].max() < height, "out of bound events: y = {}, h = {}".format(events['y'].max(), height)
+        assert events['x'].max(
+        ) < width, 'out of bound events: x = {}, w = {}'.format(
+            events['x'].max(), width)
+        assert events['y'].max(
+        ) < height, 'out of bound events: y = {}, h = {}'.format(
+            events['y'].max(), height)
 
         img[events['y'], events['x'], :] = 255 * events['p'][:, None]
     return img
 
 
 def draw_bboxes_bbv(img, boxes, labelmap=LABELMAP_GEN1) -> np.ndarray:
-    """
-    draw bboxes in the image img
-    """
-    colors = cv2.applyColorMap(np.arange(0, 255).astype(np.uint8), cv2.COLORMAP_HSV)
+    """draw bboxes in the image img."""
+    colors = cv2.applyColorMap(
+        np.arange(0, 255).astype(np.uint8), cv2.COLORMAP_HSV)
     colors = [tuple(*item) for item in colors.tolist()]
 
     if labelmap == LABELMAP_GEN1:
@@ -80,16 +83,19 @@ def draw_bboxes_bbv(img, boxes, labelmap=LABELMAP_GEN1) -> np.ndarray:
             bbox_txt += f' {score:.2f}'
         color_tuple_rgb = classid2colors[class_id]
         img = bbv.draw_rectangle(img, bbox, bbox_color=color_tuple_rgb)
-        img = bbv.add_label(img, bbox_txt, bbox, text_bg_color=color_tuple_rgb, top=True)
+        img = bbv.add_label(img,
+                            bbox_txt,
+                            bbox,
+                            text_bg_color=color_tuple_rgb,
+                            top=True)
 
     return img
 
 
 def draw_bboxes(img, boxes, labelmap=LABELMAP_GEN1) -> None:
-    """
-    draw bboxes in the image img
-    """
-    colors = cv2.applyColorMap(np.arange(0, 255).astype(np.uint8), cv2.COLORMAP_HSV)
+    """draw bboxes in the image img."""
+    colors = cv2.applyColorMap(
+        np.arange(0, 255).astype(np.uint8), cv2.COLORMAP_HSV)
     colors = [tuple(*item) for item in colors.tolist()]
 
     for i in range(boxes.shape[0]):
@@ -102,5 +108,7 @@ def draw_bboxes(img, boxes, labelmap=LABELMAP_GEN1) -> None:
         color = colors[class_id * 60 % 255]
         center = ((pt1[0] + pt2[0]) // 2, (pt1[1] + pt2[1]) // 2)
         cv2.rectangle(img, pt1, pt2, color, 1)
-        cv2.putText(img, class_name, (center[0], pt2[1] - 1), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color)
-        cv2.putText(img, str(score), (center[0], pt1[1] - 1), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color)
+        cv2.putText(img, class_name, (center[0], pt2[1] - 1),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, color)
+        cv2.putText(img, str(score), (center[0], pt1[1] - 1),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, color)

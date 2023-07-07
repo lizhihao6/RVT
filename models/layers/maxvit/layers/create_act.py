@@ -1,12 +1,10 @@
-""" Activation Factory
-Hacked together by / Copyright 2020 Ross Wightman
-"""
-from typing import Union, Callable, Type
+"""Activation Factory Hacked together by / Copyright 2020 Ross Wightman."""
+from typing import Callable, Type, Union
 
 from .activations import *
 from .activations_jit import *
 from .activations_me import *
-from .config import is_exportable, is_scriptable, is_no_jit
+from .config import is_exportable, is_no_jit, is_scriptable
 
 # PyTorch has an optimized, native 'silu' (aka 'swish') operator as of PyTorch 1.7.
 # Also hardsigmoid, hardswish, and soon mish. This code will use native version if present.
@@ -15,7 +13,6 @@ _has_silu = 'silu' in dir(torch.nn.functional)
 _has_hardswish = 'hardswish' in dir(torch.nn.functional)
 _has_hardsigmoid = 'hardsigmoid' in dir(torch.nn.functional)
 _has_mish = 'mish' in dir(torch.nn.functional)
-
 
 _ACT_FN_DEFAULT = dict(
     silu=F.silu if _has_silu else swish,
@@ -41,8 +38,7 @@ _ACT_FN_JIT = dict(
     mish=F.mish if _has_mish else mish_jit,
     hard_sigmoid=F.hardsigmoid if _has_hardsigmoid else hard_sigmoid_jit,
     hard_swish=F.hardswish if _has_hardswish else hard_swish_jit,
-    hard_mish=hard_mish_jit
-)
+    hard_mish=hard_mish_jit)
 
 _ACT_FN_ME = dict(
     silu=F.silu if _has_silu else swish_me,
@@ -57,7 +53,6 @@ _ACT_FNS = (_ACT_FN_ME, _ACT_FN_JIT, _ACT_FN_DEFAULT)
 for a in _ACT_FNS:
     a.setdefault('hardsigmoid', a.get('hard_sigmoid'))
     a.setdefault('hardswish', a.get('hard_swish'))
-
 
 _ACT_LAYER_DEFAULT = dict(
     silu=nn.SiLU if _has_silu else Swish,
@@ -84,8 +79,7 @@ _ACT_LAYER_JIT = dict(
     mish=nn.Mish if _has_mish else MishJit,
     hard_sigmoid=nn.Hardsigmoid if _has_hardsigmoid else HardSigmoidJit,
     hard_swish=nn.Hardswish if _has_hardswish else HardSwishJit,
-    hard_mish=HardMishJit
-)
+    hard_mish=HardMishJit)
 
 _ACT_LAYER_ME = dict(
     silu=nn.SiLU if _has_silu else SwishMe,
@@ -103,10 +97,9 @@ for a in _ACT_LAYERS:
 
 
 def get_act_fn(name: Union[Callable, str] = 'relu'):
-    """ Activation Function Factory
-    Fetching activation fns by name with this function allows export or torch script friendly
-    functions to be returned dynamically based on current config.
-    """
+    """Activation Function Factory Fetching activation fns by name with this
+    function allows export or torch script friendly functions to be returned
+    dynamically based on current config."""
     if not name:
         return None
     if isinstance(name, Callable):
@@ -123,10 +116,9 @@ def get_act_fn(name: Union[Callable, str] = 'relu'):
 
 
 def get_act_layer(name: Union[Type[nn.Module], str] = 'relu'):
-    """ Activation Layer Factory
-    Fetching activation layers by name with this function allows export or torch script friendly
-    functions to be returned dynamically based on current config.
-    """
+    """Activation Layer Factory Fetching activation layers by name with this
+    function allows export or torch script friendly functions to be returned
+    dynamically based on current config."""
     if not name:
         return None
     if not isinstance(name, str):

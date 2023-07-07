@@ -7,7 +7,9 @@ from omegaconf import DictConfig
 
 from data.utils.types import ObjDetOutput
 from loggers.wandb_logger import WandbLogger
-from utils.evaluation.prophesee.visualize.vis_utils import LABELMAP_GEN1, LABELMAP_GEN4_SHORT, draw_bboxes
+from utils.evaluation.prophesee.visualize.vis_utils import (
+    LABELMAP_GEN1, LABELMAP_GEN4_SHORT, draw_bboxes)
+
 from .viz_base import VizCallbackBase
 
 
@@ -18,6 +20,7 @@ class DetectionVizEnum(Enum):
 
 
 class DetectionVizCallback(VizCallbackBase):
+
     def __init__(self, config: DictConfig):
         super().__init__(config=config, buffer_entries=DetectionVizEnum)
 
@@ -29,11 +32,8 @@ class DetectionVizCallback(VizCallbackBase):
         else:
             raise NotImplementedError
 
-    def on_train_batch_end_custom(self,
-                                  logger: WandbLogger,
-                                  outputs: Any,
-                                  batch: Any,
-                                  log_n_samples: int,
+    def on_train_batch_end_custom(self, logger: WandbLogger, outputs: Any,
+                                  batch: Any, log_n_samples: int,
                                   global_step: int) -> None:
         if outputs is None:
             # If we tried to skip the training step (not supported in DDP in PL, atm)
@@ -53,13 +53,19 @@ class DetectionVizCallback(VizCallbackBase):
 
             predictions_proph = outputs[ObjDetOutput.PRED_PROPH][sample_idx]
             prediction_img = ev_img.copy()
-            draw_bboxes(prediction_img, predictions_proph, labelmap=self.label_map)
+            draw_bboxes(prediction_img,
+                        predictions_proph,
+                        labelmap=self.label_map)
 
             labels_proph = outputs[ObjDetOutput.LABELS_PROPH][sample_idx]
             label_img = ev_img.copy()
             draw_bboxes(label_img, labels_proph, labelmap=self.label_map)
 
-            merged_img.append(rearrange([prediction_img, label_img], 'pl H W C -> (pl H) W C', pl=2, C=3))
+            merged_img.append(
+                rearrange([prediction_img, label_img],
+                          'pl H W C -> (pl H) W C',
+                          pl=2,
+                          C=3))
             captions.append(f'sample_{sample_idx}')
 
         logger.log_images(key='train/predictions',
@@ -91,8 +97,13 @@ class DetectionVizCallback(VizCallbackBase):
         assert len(pred_imgs) == len(label_imgs)
         merged_img = []
         captions = []
-        for idx, (pred_img, label_img) in enumerate(zip(pred_imgs, label_imgs)):
-            merged_img.append(rearrange([pred_img, label_img], 'pl H W C -> (pl H) W C', pl=2, C=3))
+        for idx, (pred_img, label_img) in enumerate(zip(pred_imgs,
+                                                        label_imgs)):
+            merged_img.append(
+                rearrange([pred_img, label_img],
+                          'pl H W C -> (pl H) W C',
+                          pl=2,
+                          C=3))
             captions.append(f'sample_{idx}')
 
         logger.log_images(key='val/predictions',

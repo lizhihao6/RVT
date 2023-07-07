@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from typing import List, Tuple, Union, Optional
-
 import math
+from typing import List, Optional, Tuple, Union
+
 import numpy as np
 import torch as th
 from einops import rearrange
@@ -20,9 +20,8 @@ class ObjectLabelBase:
         'class_confidence': 6,
     }
 
-    def __init__(self,
-                 object_labels: th.Tensor,
-                 input_size_hw: Tuple[int, int]):
+    def __init__(self, object_labels: th.Tensor, input_size_hw: Tuple[int,
+                                                                      int]):
         assert isinstance(object_labels, th.Tensor)
         assert object_labels.dtype in {th.float32, th.float64}
         assert object_labels.ndim == 2
@@ -56,11 +55,12 @@ class ObjectLabelBase:
     @classmethod
     def create_empty(cls):
         # This is useful to represent cases where no labels are available.
-        return ObjectLabelBase(object_labels=th.empty((0, len(cls._str2idx))), input_size_hw=(0, 0))
+        return ObjectLabelBase(object_labels=th.empty((0, len(cls._str2idx))),
+                               input_size_hw=(0, 0))
 
     def _assert_not_numpy(self):
-        assert not self._is_numpy, "Labels have been converted numpy. \
-        Numpy is not supported for the intended operations."
+        assert not self._is_numpy, 'Labels have been converted numpy. \
+        Numpy is not supported for the intended operations.'
 
     def to(self, *args, **kwargs):
         # This function executes torch.to on self tensors and returns self.
@@ -70,8 +70,8 @@ class ObjectLabelBase:
         return self
 
     def numpy_(self) -> None:
-        """
-        In place conversion to numpy (detach + to cpu + to numpy).
+        """In place conversion to numpy (detach + to cpu + to numpy).
+
         Cannot be undone.
         """
         self._is_numpy = True
@@ -147,12 +147,14 @@ class ObjectLabelBase:
 
 
 class ObjectLabelFactory(ObjectLabelBase):
+
     def __init__(self,
                  object_labels: th.Tensor,
                  objframe_idx_2_label_idx: th.Tensor,
                  input_size_hw: Tuple[int, int],
                  downsample_factor: Optional[float] = None):
-        super().__init__(object_labels=object_labels, input_size_hw=input_size_hw)
+        super().__init__(object_labels=object_labels,
+                         input_size_hw=input_size_hw)
         assert objframe_idx_2_label_idx.dtype == th.int64
         assert objframe_idx_2_label_idx.dim() == 1
 
@@ -164,19 +166,26 @@ class ObjectLabelFactory(ObjectLabelBase):
         self.clamp_to_frame_()
 
     @staticmethod
-    def from_structured_array(object_labels: np.ndarray,
-                              objframe_idx_2_label_idx: np.ndarray,
-                              input_size_hw: Tuple[int, int],
-                              downsample_factor: Optional[float] = None) -> ObjectLabelFactory:
-        np_labels = [object_labels[key].astype('float32') for key in ObjectLabels._str2idx.keys()]
+    def from_structured_array(
+            object_labels: np.ndarray,
+            objframe_idx_2_label_idx: np.ndarray,
+            input_size_hw: Tuple[int, int],
+            downsample_factor: Optional[float] = None) -> ObjectLabelFactory:
+        np_labels = [
+            object_labels[key].astype('float32')
+            for key in ObjectLabels._str2idx.keys()
+        ]
         np_labels = rearrange(np_labels, 'fields L -> L fields')
         torch_labels = th.from_numpy(np_labels)
-        objframe_idx_2_label_idx = th.from_numpy(objframe_idx_2_label_idx.astype('int64'))
-        assert objframe_idx_2_label_idx.numel() == np.unique(object_labels['t']).size
-        return ObjectLabelFactory(object_labels=torch_labels,
-                                  objframe_idx_2_label_idx=objframe_idx_2_label_idx,
-                                  input_size_hw=input_size_hw,
-                                  downsample_factor=downsample_factor)
+        objframe_idx_2_label_idx = th.from_numpy(
+            objframe_idx_2_label_idx.astype('int64'))
+        assert objframe_idx_2_label_idx.numel() == np.unique(
+            object_labels['t']).size
+        return ObjectLabelFactory(
+            object_labels=torch_labels,
+            objframe_idx_2_label_idx=objframe_idx_2_label_idx,
+            input_size_hw=input_size_hw,
+            downsample_factor=downsample_factor)
 
     def __len__(self):
         return len(self.objframe_idx_2_label_idx)
@@ -189,7 +198,8 @@ class ObjectLabelFactory(ObjectLabelBase):
         is_last_item = (item == length - 1)
 
         from_idx = self.objframe_idx_2_label_idx[item]
-        to_idx = self.object_labels.shape[0] if is_last_item else self.objframe_idx_2_label_idx[item + 1]
+        to_idx = self.object_labels.shape[
+            0] if is_last_item else self.objframe_idx_2_label_idx[item + 1]
         assert to_idx > from_idx
         object_labels = ObjectLabels(
             object_labels=self.object_labels[from_idx:to_idx].clone(),
@@ -200,10 +210,11 @@ class ObjectLabelFactory(ObjectLabelBase):
 
 
 class ObjectLabels(ObjectLabelBase):
-    def __init__(self,
-                 object_labels: th.Tensor,
-                 input_size_hw: Tuple[int, int]):
-        super().__init__(object_labels=object_labels, input_size_hw=input_size_hw)
+
+    def __init__(self, object_labels: th.Tensor, input_size_hw: Tuple[int,
+                                                                      int]):
+        super().__init__(object_labels=object_labels,
+                         input_size_hw=input_size_hw)
 
     def __len__(self) -> int:
         return self.object_labels.shape[0]
@@ -228,8 +239,10 @@ class ObjectLabels(ObjectLabelBase):
 
         angle_rad = angle_deg / 180 * math.pi
         # counter-clockwise rotation
-        rot_matrix = th.tensor([[math.cos(angle_rad), math.sin(angle_rad)],
-                                [-math.sin(angle_rad), math.cos(angle_rad)]], device=self.device)
+        rot_matrix = th.tensor(
+            [[math.cos(angle_rad), math.sin(angle_rad)],
+             [-math.sin(angle_rad), math.cos(angle_rad)]],
+            device=self.device)
 
         points = points - center
         points = th.einsum('ij,pnj->pni', rot_matrix, points)
@@ -253,12 +266,13 @@ class ObjectLabels(ObjectLabelBase):
         assert th.all(self.x + self.w <= self.input_size_hw[1] - 1)
         assert th.all(self.y + self.h <= self.input_size_hw[0] - 1)
 
-    def zoom_in_and_rescale_(self, zoom_coordinates_x0y0: Tuple[int, int], zoom_in_factor: float):
-        """
-        1) Computes a new smaller canvas size: original canvas scaled by a factor of 1/zoom_in_factor (downscaling)
-        2) Places the smaller canvas inside the original canvas at the top-left coordinates zoom_coordinates_x0y0
-        3) Extract the smaller canvas and rescale it back to the original resolution
-        """
+    def zoom_in_and_rescale_(self, zoom_coordinates_x0y0: Tuple[int, int],
+                             zoom_in_factor: float):
+        """1) Computes a new smaller canvas size: original canvas scaled by a
+        factor of 1/zoom_in_factor (downscaling) 2) Places the smaller canvas
+        inside the original canvas at the top-left coordinates
+        zoom_coordinates_x0y0 3) Extract the smaller canvas and rescale it back
+        to the original resolution."""
         if len(self) == 0:
             return
         assert len(zoom_coordinates_x0y0) == 2
@@ -269,7 +283,8 @@ class ObjectLabels(ObjectLabelBase):
         h_orig, w_orig = self.input_size_hw
         assert 0 <= z_x0 <= w_orig - 1
         assert 0 <= z_y0 <= h_orig - 1
-        zoom_window_h, zoom_window_w = tuple(x / zoom_in_factor for x in self.input_size_hw)
+        zoom_window_h, zoom_window_w = tuple(x / zoom_in_factor
+                                             for x in self.input_size_hw)
         z_x1 = min(z_x0 + zoom_window_w, w_orig - 1)
         assert z_x1 <= w_orig - 1, f'{z_x1=} is larger than {w_orig-1=}'
         z_y1 = min(z_y0 + zoom_window_h, h_orig - 1)
@@ -291,11 +306,11 @@ class ObjectLabels(ObjectLabelBase):
 
         self.scale_(scaling_multiplier=zoom_in_factor)
 
-    def zoom_out_and_rescale_(self, zoom_coordinates_x0y0: Tuple[int, int], zoom_out_factor: float):
-        """
-        1) Scales the input by a factor of 1/zoom_out_factor (i.e. reduces the canvas size)
-        2) Places the downscaled canvas into the original canvas at the top-left coordinates zoom_coordinates_x0y0
-        """
+    def zoom_out_and_rescale_(self, zoom_coordinates_x0y0: Tuple[int, int],
+                              zoom_out_factor: float):
+        """1) Scales the input by a factor of 1/zoom_out_factor (i.e. reduces
+        the canvas size) 2) Places the downscaled canvas into the original
+        canvas at the top-left coordinates zoom_coordinates_x0y0."""
         if len(self) == 0:
             return
         assert len(zoom_coordinates_x0y0) == 2
@@ -324,8 +339,10 @@ class ObjectLabels(ObjectLabelBase):
         new_img_ht = scaling_multiplier * img_ht
         new_img_wd = scaling_multiplier * img_wd
         self.input_size_hw = (new_img_ht, new_img_wd)
-        x1 = th.clamp((self.x + self.w) * scaling_multiplier, max=new_img_wd - 1)
-        y1 = th.clamp((self.y + self.h) * scaling_multiplier, max=new_img_ht - 1)
+        x1 = th.clamp((self.x + self.w) * scaling_multiplier,
+                      max=new_img_wd - 1)
+        y1 = th.clamp((self.y + self.h) * scaling_multiplier,
+                      max=new_img_ht - 1)
         self.x = self.x * scaling_multiplier
         self.y = self.y * scaling_multiplier
 
@@ -343,7 +360,9 @@ class ObjectLabels(ObjectLabelBase):
         self._assert_not_numpy()
 
         if format_ == 'yolox':
-            out = th.zeros((len(self), 5), dtype=th.float32, device=self.device)
+            out = th.zeros((len(self), 5),
+                           dtype=th.float32,
+                           device=self.device)
             if len(self) == 0:
                 return out
             out[:, 0] = self.class_id
@@ -356,7 +375,8 @@ class ObjectLabels(ObjectLabelBase):
             raise NotImplementedError
 
     @staticmethod
-    def get_labels_as_batched_tensor(obj_label_list: List[ObjectLabels], format_: str = 'yolox') -> th.Tensor:
+    def get_labels_as_batched_tensor(obj_label_list: List[ObjectLabels],
+                                     format_: str = 'yolox') -> th.Tensor:
         num_object_frames = len(obj_label_list)
         assert num_object_frames > 0
         max_num_labels_per_object_frame = max([len(x) for x in obj_label_list])
@@ -365,9 +385,12 @@ class ObjectLabels(ObjectLabelBase):
         if format_ == 'yolox':
             tensor_labels = []
             for labels in obj_label_list:
-                obj_labels_tensor = labels.get_labels_as_tensors(format_=format_)
+                obj_labels_tensor = labels.get_labels_as_tensors(
+                    format_=format_)
                 num_to_pad = max_num_labels_per_object_frame - len(labels)
-                padded_labels = pad(obj_labels_tensor, (0, 0, 0, num_to_pad), mode='constant', value=0)
+                padded_labels = pad(obj_labels_tensor, (0, 0, 0, num_to_pad),
+                                    mode='constant',
+                                    value=0)
                 tensor_labels.append(padded_labels)
             tensor_labels = th.stack(tensors=tensor_labels, dim=0)
             return tensor_labels
@@ -376,7 +399,9 @@ class ObjectLabels(ObjectLabelBase):
 
 
 class SparselyBatchedObjectLabels:
-    def __init__(self, sparse_object_labels_batch: List[Optional[ObjectLabels]]):
+
+    def __init__(self,
+                 sparse_object_labels_batch: List[Optional[ObjectLabels]]):
         # Can contain None elements that indicate missing labels.
         for entry in sparse_object_labels_batch:
             assert isinstance(entry, ObjectLabels) or entry is None
@@ -391,12 +416,14 @@ class SparselyBatchedObjectLabels:
 
     def __getitem__(self, item: int) -> Optional[ObjectLabels]:
         if item < 0 or item >= len(self):
-            raise IndexError(f'Index ({item}) out of range (0, {len(self) - 1})')
+            raise IndexError(
+                f'Index ({item}) out of range (0, {len(self) - 1})')
         return self.sparse_object_labels_batch[item]
 
     def __add__(self, other: SparselyBatchedObjectLabels):
         sparse_object_labels_batch = self.sparse_object_labels_batch + other.sparse_object_labels_batch
-        return SparselyBatchedObjectLabels(sparse_object_labels_batch=sparse_object_labels_batch)
+        return SparselyBatchedObjectLabels(
+            sparse_object_labels_batch=sparse_object_labels_batch)
 
     def set_empty_labels_to_none_(self):
         for idx, obj_label in enumerate(self.sparse_object_labels_batch):
@@ -404,7 +431,8 @@ class SparselyBatchedObjectLabels:
                 self.sparse_object_labels_batch[idx] = None
 
     @property
-    def input_size_hw(self) -> Optional[Union[Tuple[int, int], Tuple[float, float]]]:
+    def input_size_hw(
+            self) -> Optional[Union[Tuple[int, int], Tuple[float, float]]]:
         for obj_labels in self.sparse_object_labels_batch:
             if obj_labels is not None:
                 return obj_labels.input_size_hw
@@ -413,14 +441,16 @@ class SparselyBatchedObjectLabels:
     def zoom_in_and_rescale_(self, *args, **kwargs):
         for idx, entry in enumerate(self.sparse_object_labels_batch):
             if entry is not None:
-                self.sparse_object_labels_batch[idx].zoom_in_and_rescale_(*args, **kwargs)
+                self.sparse_object_labels_batch[idx].zoom_in_and_rescale_(
+                    *args, **kwargs)
         # We may have deleted labels. If no labels are left, set the object to None
         self.set_empty_labels_to_none_()
 
     def zoom_out_and_rescale_(self, *args, **kwargs):
         for idx, entry in enumerate(self.sparse_object_labels_batch):
             if entry is not None:
-                self.sparse_object_labels_batch[idx].zoom_out_and_rescale_(*args, **kwargs)
+                self.sparse_object_labels_batch[idx].zoom_out_and_rescale_(
+                    *args, **kwargs)
 
     def rotate_(self, *args, **kwargs):
         for idx, entry in enumerate(self.sparse_object_labels_batch):
@@ -445,7 +475,8 @@ class SparselyBatchedObjectLabels:
                 self.sparse_object_labels_batch[idx].to(*args, **kwargs)
         return self
 
-    def get_valid_labels_and_batch_indices(self) -> Tuple[List[ObjectLabels], List[int]]:
+    def get_valid_labels_and_batch_indices(
+            self) -> Tuple[List[ObjectLabels], List[int]]:
         out = list()
         valid_indices = list()
         for idx, label in enumerate(self.sparse_object_labels_batch):

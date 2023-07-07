@@ -1,17 +1,19 @@
-""" Layer/Module Helpers
+"""Layer/Module Helpers.
 
 Hacked together by / Copyright 2020 Ross Wightman
 """
-from itertools import repeat
 import collections.abc
+from itertools import repeat
 
 
 # From PyTorch internals
 def _ntuple(n):
+
     def parse(x):
         if isinstance(x, collections.abc.Iterable) and not isinstance(x, str):
             return x
         return tuple(repeat(x, n))
+
     return parse
 
 
@@ -34,10 +36,10 @@ def make_divisible(v, divisor=8, min_value=None, round_limit=.9):
 def extend_tuple(x, n):
     # pdas a tuple to specified n by padding with last value
     if not isinstance(x, (tuple, list)):
-        x = (x,)
+        x = (x, )
     else:
         x = tuple(x)
     pad_n = n - len(x)
     if pad_n <= 0:
         return x[:n]
-    return x + (x[-1],) * pad_n
+    return x + (x[-1], ) * pad_n

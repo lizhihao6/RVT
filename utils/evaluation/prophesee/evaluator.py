@@ -1,4 +1,4 @@
-from typing import Any, List, Optional, Dict
+from typing import Any, Dict, List, Optional
 from warnings import warn
 
 import numpy as np
@@ -53,10 +53,13 @@ class PropheseeEvaluator:
     def has_data(self):
         return not self._buffer_empty
 
-    def evaluate_buffer(self, img_height: int, img_width: int) -> Optional[Dict[str, Any]]:
+    def evaluate_buffer(self, img_height: int,
+                        img_width: int) -> Optional[Dict[str, Any]]:
         # e.g call in on_validation_epoch_end
         if self._buffer_empty:
-            warn("Attempt to use prophesee evaluation buffer, but it is empty", UserWarning, stacklevel=2)
+            warn('Attempt to use prophesee evaluation buffer, but it is empty',
+                 UserWarning,
+                 stacklevel=2)
             return
 
         labels = self._get_from_buffer(self.LABELS)

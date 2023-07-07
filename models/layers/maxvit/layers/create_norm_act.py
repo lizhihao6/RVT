@@ -1,4 +1,4 @@
-""" NormAct (Normalizaiton + Activation Layer) Factory
+"""NormAct (Normalizaiton + Activation Layer) Factory.
 
 Create norm + act combo modules that attempt to be backwards compatible with separate norm + act
 isntances in models. Where these are used it will be possible to swap separate BN + act layers with
@@ -6,13 +6,15 @@ combined modules like IABN or EvoNorms.
 
 Hacked together by / Copyright 2020 Ross Wightman
 """
-import types
 import functools
+import types
 
 from .evo_norm import *
-from .filter_response_norm import FilterResponseNormAct2d, FilterResponseNormTlu2d
-from .norm_act import BatchNormAct2d, GroupNormAct, LayerNormAct, LayerNormAct2d
+from .filter_response_norm import (FilterResponseNormAct2d,
+                                   FilterResponseNormTlu2d)
 from .inplace_abn import InplaceAbn
+from .norm_act import (BatchNormAct2d, GroupNormAct, LayerNormAct,
+                       LayerNormAct2d)
 
 _NORM_ACT_MAP = dict(
     batchnorm=BatchNormAct2d,
@@ -38,10 +40,17 @@ _NORM_ACT_MAP = dict(
 _NORM_ACT_TYPES = {m for n, m in _NORM_ACT_MAP.items()}
 # has act_layer arg to define act type
 _NORM_ACT_REQUIRES_ARG = {
-    BatchNormAct2d, GroupNormAct, LayerNormAct, LayerNormAct2d, FilterResponseNormAct2d, InplaceAbn}
+    BatchNormAct2d, GroupNormAct, LayerNormAct, LayerNormAct2d,
+    FilterResponseNormAct2d, InplaceAbn
+}
 
 
-def create_norm_act_layer(layer_name, num_features, act_layer=None, apply_act=True, jit=False, **kwargs):
+def create_norm_act_layer(layer_name,
+                          num_features,
+                          act_layer=None,
+                          apply_act=True,
+                          jit=False,
+                          **kwargs):
     layer = get_norm_act_layer(layer_name, act_layer=act_layer)
     layer_instance = layer(num_features, apply_act=apply_act, **kwargs)
     if jit:
@@ -50,8 +59,10 @@ def create_norm_act_layer(layer_name, num_features, act_layer=None, apply_act=Tr
 
 
 def get_norm_act_layer(norm_layer, act_layer=None):
-    assert isinstance(norm_layer, (type, str,  types.FunctionType, functools.partial))
-    assert act_layer is None or isinstance(act_layer, (type, str, types.FunctionType, functools.partial))
+    assert isinstance(norm_layer,
+                      (type, str, types.FunctionType, functools.partial))
+    assert act_layer is None or isinstance(
+        act_layer, (type, str, types.FunctionType, functools.partial))
     norm_act_kwargs = {}
 
     # unbind partial fn, so args can be rebound later
@@ -64,7 +75,7 @@ def get_norm_act_layer(norm_layer, act_layer=None):
         norm_act_layer = _NORM_ACT_MAP.get(layer_name, None)
     elif norm_layer in _NORM_ACT_TYPES:
         norm_act_layer = norm_layer
-    elif isinstance(norm_layer,  types.FunctionType):
+    elif isinstance(norm_layer, types.FunctionType):
         # if function type, must be a lambda/fn that creates a norm_act layer
         norm_act_layer = norm_layer
     else:
@@ -80,12 +91,13 @@ def get_norm_act_layer(norm_layer, act_layer=None):
         elif type_name.startswith('layernorm'):
             norm_act_layer = LayerNormAct
         else:
-            assert False, f"No equivalent norm_act layer for {type_name}"
+            assert False, f'No equivalent norm_act layer for {type_name}'
 
     if norm_act_layer in _NORM_ACT_REQUIRES_ARG:
         # pass `act_layer` through for backwards compat where `act_layer=None` implies no activation.
         # In the future, may force use of `apply_act` with `act_layer` arg bound to relevant NormAct types
         norm_act_kwargs.setdefault('act_layer', act_layer)
     if norm_act_kwargs:
-        norm_act_layer = functools.partial(norm_act_layer, **norm_act_kwargs)  # bind/rebind args
+        norm_act_layer = functools.partial(
+            norm_act_layer, **norm_act_kwargs)  # bind/rebind args
     return norm_act_layer

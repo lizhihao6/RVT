@@ -1,4 +1,4 @@
-""" Activations (memory-efficient w/ custom autograd)
+"""Activations (memory-efficient w/ custom autograd)
 
 A collection of activations fn and modules with a common interface so that they can
 easily be swapped. All have an `inplace` arg even if not used.
@@ -26,13 +26,13 @@ def swish_jit_bwd(x, grad_output):
 
 
 class SwishJitAutoFn(torch.autograd.Function):
-    """ torch.jit.script optimised Swish w/ memory-efficient checkpoint
-    Inspired by conversation btw Jeremy Howard & Adam Pazske
-    https://twitter.com/jeremyphoward/status/1188251041835315200
-    """
+    """torch.jit.script optimised Swish w/ memory-efficient checkpoint Inspired
+    by conversation btw Jeremy Howard & Adam Pazske
+    https://twitter.com/jeremyphoward/status/1188251041835315200."""
+
     @staticmethod
     def symbolic(g, x):
-        return g.op("Mul", x, g.op("Sigmoid", x))
+        return g.op('Mul', x, g.op('Sigmoid', x))
 
     @staticmethod
     def forward(ctx, x):
@@ -50,6 +50,7 @@ def swish_me(x, inplace=False):
 
 
 class SwishMe(nn.Module):
+
     def __init__(self, inplace: bool = False):
         super(SwishMe, self).__init__()
 
@@ -66,13 +67,15 @@ def mish_jit_fwd(x):
 def mish_jit_bwd(x, grad_output):
     x_sigmoid = torch.sigmoid(x)
     x_tanh_sp = F.softplus(x).tanh()
-    return grad_output.mul(x_tanh_sp + x * x_sigmoid * (1 - x_tanh_sp * x_tanh_sp))
+    return grad_output.mul(x_tanh_sp + x * x_sigmoid *
+                           (1 - x_tanh_sp * x_tanh_sp))
 
 
 class MishJitAutoFn(torch.autograd.Function):
     """ Mish: A Self Regularized Non-Monotonic Neural Activation Function - https://arxiv.org/abs/1908.08681
     A memory efficient, jit scripted variant of Mish
     """
+
     @staticmethod
     def forward(ctx, x):
         ctx.save_for_backward(x)
@@ -89,6 +92,7 @@ def mish_me(x, inplace=False):
 
 
 class MishMe(nn.Module):
+
     def __init__(self, inplace: bool = False):
         super(MishMe, self).__init__()
 
@@ -108,6 +112,7 @@ def hard_sigmoid_jit_bwd(x, grad_output):
 
 
 class HardSigmoidJitAutoFn(torch.autograd.Function):
+
     @staticmethod
     def forward(ctx, x):
         ctx.save_for_backward(x)
@@ -124,6 +129,7 @@ def hard_sigmoid_me(x, inplace: bool = False):
 
 
 class HardSigmoidMe(nn.Module):
+
     def __init__(self, inplace: bool = False):
         super(HardSigmoidMe, self).__init__()
 
@@ -139,12 +145,13 @@ def hard_swish_jit_fwd(x):
 @torch.jit.script
 def hard_swish_jit_bwd(x, grad_output):
     m = torch.ones_like(x) * (x >= 3.)
-    m = torch.where((x >= -3.) & (x <= 3.),  x / 3. + .5, m)
+    m = torch.where((x >= -3.) & (x <= 3.), x / 3. + .5, m)
     return grad_output * m
 
 
 class HardSwishJitAutoFn(torch.autograd.Function):
-    """A memory efficient, jit-scripted HardSwish activation"""
+    """A memory efficient, jit-scripted HardSwish activation."""
+
     @staticmethod
     def forward(ctx, x):
         ctx.save_for_backward(x)
@@ -157,10 +164,17 @@ class HardSwishJitAutoFn(torch.autograd.Function):
 
     @staticmethod
     def symbolic(g, self):
-        input = g.op("Add", self, g.op('Constant', value_t=torch.tensor(3, dtype=torch.float)))
-        hardtanh_ = g.op("Clip", input, g.op('Constant', value_t=torch.tensor(0, dtype=torch.float)), g.op('Constant', value_t=torch.tensor(6, dtype=torch.float)))
-        hardtanh_ = g.op("Div", hardtanh_, g.op('Constant', value_t=torch.tensor(6, dtype=torch.float)))
-        return g.op("Mul", self, hardtanh_)
+        input = g.op(
+            'Add', self,
+            g.op('Constant', value_t=torch.tensor(3, dtype=torch.float)))
+        hardtanh_ = g.op(
+            'Clip', input,
+            g.op('Constant', value_t=torch.tensor(0, dtype=torch.float)),
+            g.op('Constant', value_t=torch.tensor(6, dtype=torch.float)))
+        hardtanh_ = g.op(
+            'Div', hardtanh_,
+            g.op('Constant', value_t=torch.tensor(6, dtype=torch.float)))
+        return g.op('Mul', self, hardtanh_)
 
 
 def hard_swish_me(x, inplace=False):
@@ -168,6 +182,7 @@ def hard_swish_me(x, inplace=False):
 
 
 class HardSwishMe(nn.Module):
+
     def __init__(self, inplace: bool = False):
         super(HardSwishMe, self).__init__()
 
@@ -188,10 +203,10 @@ def hard_mish_jit_bwd(x, grad_output):
 
 
 class HardMishJitAutoFn(torch.autograd.Function):
-    """ A memory efficient, jit scripted variant of Hard Mish
-    Experimental, based on notes by Mish author Diganta Misra at
-      https://github.com/digantamisra98/H-Mish/blob/0da20d4bc58e696b6803f2523c58d3c8a82782d0/README.md
-    """
+    """A memory efficient, jit scripted variant of Hard Mish Experimental,
+    based on notes by Mish author Diganta Misra at https://github.com/digantami
+    sra98/H-Mish/blob/0da20d4bc58e696b6803f2523c58d3c8a82782d0/README.md."""
+
     @staticmethod
     def forward(ctx, x):
         ctx.save_for_backward(x)
@@ -208,11 +223,9 @@ def hard_mish_me(x, inplace: bool = False):
 
 
 class HardMishMe(nn.Module):
+
     def __init__(self, inplace: bool = False):
         super(HardMishMe, self).__init__()
 
     def forward(self, x):
         return HardMishJitAutoFn.apply(x)
-
-
-

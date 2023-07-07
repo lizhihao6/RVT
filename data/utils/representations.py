@@ -1,12 +1,14 @@
 from abc import ABC, abstractmethod
-import sparseconvnet as scn
 
+import sparseconvnet as scn
 import torch as th
 
 
 class RepresentationBase(ABC):
+
     @abstractmethod
-    def construct(self, x: th.Tensor, y: th.Tensor, pol: th.Tensor, time: th.Tensor) -> th.Tensor:
+    def construct(self, x: th.Tensor, y: th.Tensor, pol: th.Tensor,
+                  time: th.Tensor) -> th.Tensor:
         ...
 
     @staticmethod
@@ -15,13 +17,14 @@ class RepresentationBase(ABC):
 
 
 class EventSurface(RepresentationBase):
+
     def __init__(self, height: int, width: int):
         self.sparse_to_dense = scn.Sequential(
             scn.InputLayer(2, (height, width), mode=1),
-            scn.SparseToDense(2, 4)
-        )
+            scn.SparseToDense(2, 4))
 
-    def construct(self, x: th.Tensor, y: th.Tensor, pol: th.Tensor, time: th.Tensor) -> th.Tensor:
+    def construct(self, x: th.Tensor, y: th.Tensor, pol: th.Tensor,
+                  time: th.Tensor) -> th.Tensor:
         device = x.device
         assert y.device == pol.device == time.device == device
         assert self._is_int_tensor(x)
@@ -40,11 +43,11 @@ class EventSurface(RepresentationBase):
 
         yxb = th.stack((y, x, th.zeros_like(x)), dim=1)
         xytp = th.stack((x, y, t_norm, pol), dim=1)
-        
+
         dense = self.sparse_to_dense((yxb, xytp.float()))
         assert len(dense.shape) == 4
-        dense = dense[0].permute([1, 2, 0]) # [H, W, C]
+        dense = dense[0].permute([1, 2, 0])  # [H, W, C]
         sparse = dense.to_sparse(2)
-        
+
         xytp = sparse.values().round().long()
         return xytp

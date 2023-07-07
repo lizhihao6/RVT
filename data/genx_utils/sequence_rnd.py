@@ -2,18 +2,15 @@ from pathlib import Path
 
 from data.genx_utils.labels import SparselyBatchedObjectLabels
 from data.genx_utils.sequence_base import SequenceBase
-from data.utils.types import DataType, DatasetType, LoaderDataDictGenX
+from data.utils.types import DatasetType, DataType, LoaderDataDictGenX
 from utils.timers import TimerDummy as Timer
 
 
 class SequenceForRandomAccess(SequenceBase):
-    def __init__(self,
-                 path: Path,
-                 ev_representation_name: str,
-                 sequence_length: int,
-                 dataset_type: DatasetType,
-                 downsample_by_factor_2: bool,
-                 only_load_end_labels: bool):
+
+    def __init__(self, path: Path, ev_representation_name: str,
+                 sequence_length: int, dataset_type: DatasetType,
+                 downsample_by_factor_2: bool, only_load_end_labels: bool):
         super().__init__(path=path,
                          ev_representation_name=ev_representation_name,
                          sequence_length=sequence_length,
@@ -55,12 +52,14 @@ class SequenceForRandomAccess(SequenceBase):
                 labels.append(None)
             else:
                 labels.append(self._get_labels_from_repr_idx(repr_idx))
-        sparse_labels = SparselyBatchedObjectLabels(sparse_object_labels_batch=labels)
+        sparse_labels = SparselyBatchedObjectLabels(
+            sparse_object_labels_batch=labels)
         if self._only_load_labels:
             return {DataType.OBJLABELS_SEQ: sparse_labels}
 
         with Timer(timer_name='read ev reprs'):
-            ev_repr = self._get_event_repr_torch(start_idx=start_idx, end_idx=end_idx)
+            ev_repr, offsets = self._get_event_repr_torch(start_idx=start_idx,
+                                                          end_idx=end_idx)
         assert len(sparse_labels) == len(ev_repr)
 
         is_first_sample = True  # Due to random loading
@@ -68,6 +67,7 @@ class SequenceForRandomAccess(SequenceBase):
 
         out = {
             DataType.EV_REPR: ev_repr,
+            DataType.OFFSETS: offsets,
             DataType.OBJLABELS_SEQ: sparse_labels,
             DataType.IS_FIRST_SAMPLE: is_first_sample,
             DataType.IS_PADDED_MASK: is_padded_mask,

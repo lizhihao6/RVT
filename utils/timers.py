@@ -10,6 +10,7 @@ timers = {}
 
 
 class CudaTimer:
+
     def __init__(self, device: torch.device, timer_name: str):
         assert isinstance(device, torch.device)
         assert isinstance(timer_name, str)
@@ -34,7 +35,9 @@ class CudaTimer:
 
 
 def cuda_timer_decorator(device: torch.device, timer_name: str):
+
     def decorator(func):
+
         @wraps(func)
         def wrapper(*args, **kwargs):
             with CudaTimer(device=device, timer_name=timer_name):
@@ -47,6 +50,7 @@ def cuda_timer_decorator(device: torch.device, timer_name: str):
 
 
 class TimerDummy:
+
     def __init__(self, *args, **kwargs):
         pass
 
@@ -58,6 +62,7 @@ class TimerDummy:
 
 
 class Timer:
+
     def __init__(self, timer_name=''):
         self.timer_name = timer_name
         if self.timer_name not in timers:
@@ -85,10 +90,11 @@ def print_timing_info():
         timing_value_ms_mean = timing_value_s_mean * 1000
         timing_value_ms_median = timing_value_s_median * 1000
         if timing_value_ms_mean > 1000:
-            print('{}: mean={:.2f} s, median={:.2f} s'.format(timer_name, timing_value_s_mean, timing_value_s_median))
+            print('{}: mean={:.2f} s, median={:.2f} s'.format(
+                timer_name, timing_value_s_mean, timing_value_s_median))
         else:
-            print(
-                '{}: mean={:.2f} ms, median={:.2f} ms'.format(timer_name, timing_value_ms_mean, timing_value_ms_median))
+            print('{}: mean={:.2f} ms, median={:.2f} ms'.format(
+                timer_name, timing_value_ms_mean, timing_value_ms_median))
 
 
 # this will print all the timer values upon termination of any program that imported this file

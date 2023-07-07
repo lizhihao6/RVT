@@ -1,6 +1,4 @@
-"""
-Original Yolox PAFPN code with slight modifications
-"""
+"""Original Yolox PAFPN code with slight modifications."""
 from typing import Dict, Optional, Tuple
 
 import torch as th
@@ -11,27 +9,27 @@ try:
 except ImportError:
     th_compile = None
 
-from ...yolox.models.network_blocks import BaseConv, CSPLayer, DWConv
 from data.utils.types import BackboneFeatures
+
+from ...yolox.models.network_blocks import BaseConv, CSPLayer, DWConv
 
 
 class YOLOPAFPN(nn.Module):
-    """
-    Removed the direct dependency on the backbone.
-    """
+    """Removed the direct dependency on the backbone."""
 
     def __init__(
-            self,
-            depth: float = 1.0,
-            in_stages: Tuple[int, ...] = (2, 3, 4),
-            in_channels: Tuple[int, ...] = (256, 512, 1024),
-            depthwise: bool = False,
-            act: str = "silu",
-            compile_cfg: Optional[Dict] = None,
+        self,
+        depth: float = 1.0,
+        in_stages: Tuple[int, ...] = (2, 3, 4),
+        in_channels: Tuple[int, ...] = (256, 512, 1024),
+        depthwise: bool = False,
+        act: str = 'silu',
+        compile_cfg: Optional[Dict] = None,
     ):
         super().__init__()
         assert len(in_stages) == len(in_channels)
-        assert len(in_channels) == 3, 'Current implementation only for 3 feature maps'
+        assert len(
+            in_channels) == 3, 'Current implementation only for 3 feature maps'
         self.in_features = in_stages
         self.in_channels = in_channels
         Conv = DWConv if depthwise else BaseConv
@@ -42,14 +40,19 @@ class YOLOPAFPN(nn.Module):
             if compile_mdl and th_compile is not None:
                 self.forward = th_compile(self.forward, **compile_cfg['args'])
             elif compile_mdl:
-                print('Could not compile PAFPN because torch.compile is not available')
+                print(
+                    'Could not compile PAFPN because torch.compile is not available'
+                )
 
         ##################################
 
-        self.upsample = lambda x: nn.functional.interpolate(x, scale_factor=2, mode='nearest-exact')
-        self.lateral_conv0 = BaseConv(
-            in_channels[2], in_channels[1], 1, 1, act=act
-        )
+        self.upsample = lambda x: nn.functional.interpolate(
+            x, scale_factor=2, mode='nearest-exact')
+        self.lateral_conv0 = BaseConv(in_channels[2],
+                                      in_channels[1],
+                                      1,
+                                      1,
+                                      act=act)
         self.C3_p4 = CSPLayer(
             2 * in_channels[1],
             in_channels[1],
@@ -59,9 +62,11 @@ class YOLOPAFPN(nn.Module):
             act=act,
         )  # cat
 
-        self.reduce_conv1 = BaseConv(
-            in_channels[1], in_channels[0], 1, 1, act=act
-        )
+        self.reduce_conv1 = BaseConv(in_channels[1],
+                                     in_channels[0],
+                                     1,
+                                     1,
+                                     act=act)
         self.C3_p3 = CSPLayer(
             2 * in_channels[0],
             in_channels[0],
@@ -72,9 +77,7 @@ class YOLOPAFPN(nn.Module):
         )
 
         # bottom-up conv
-        self.bu_conv2 = Conv(
-            in_channels[0], in_channels[0], 3, 2, act=act
-        )
+        self.bu_conv2 = Conv(in_channels[0], in_channels[0], 3, 2, act=act)
         self.C3_n3 = CSPLayer(
             2 * in_channels[0],
             in_channels[1],
@@ -85,9 +88,7 @@ class YOLOPAFPN(nn.Module):
         )
 
         # bottom-up conv
-        self.bu_conv1 = Conv(
-            in_channels[1], in_channels[1], 3, 2, act=act
-        )
+        self.bu_conv1 = Conv(in_channels[1], in_channels[1], 3, 2, act=act)
         self.C3_n4 = CSPLayer(
             2 * in_channels[1],
             in_channels[2],
@@ -103,7 +104,9 @@ class YOLOPAFPN(nn.Module):
             if compile_mdl and th_compile is not None:
                 self.forward = th_compile(self.forward, **compile_cfg['args'])
             elif compile_mdl:
-                print('Could not compile PAFPN because torch.compile is not available')
+                print(
+                    'Could not compile PAFPN because torch.compile is not available'
+                )
         ##################################
 
     def forward(self, input: BackboneFeatures):

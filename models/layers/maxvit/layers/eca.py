@@ -1,5 +1,4 @@
-"""
-ECA module from ECAnet
+"""ECA module from ECAnet.
 
 paper: ECA-Net: Efficient Channel Attention for Deep Convolutional Neural Networks
 https://arxiv.org/abs/1910.03151
@@ -34,9 +33,9 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
 import math
-from torch import nn
-import torch.nn.functional as F
 
+import torch.nn.functional as F
+from torch import nn
 
 from .create_act import create_act_layer
 from .helpers import make_divisible
@@ -57,9 +56,18 @@ class EcaModule(nn.Module):
         act_layer: optional non-linearity after conv, enables conv bias, this is an experiment
         gate_layer: gating non-linearity to use
     """
-    def __init__(
-            self, channels=None, kernel_size=3, gamma=2, beta=1, act_layer=None, gate_layer='sigmoid',
-            rd_ratio=1/8, rd_channels=None, rd_divisor=8, use_mlp=False):
+
+    def __init__(self,
+                 channels=None,
+                 kernel_size=3,
+                 gamma=2,
+                 beta=1,
+                 act_layer=None,
+                 gate_layer='sigmoid',
+                 rd_ratio=1 / 8,
+                 rd_channels=None,
+                 rd_divisor=8,
+                 use_mlp=False):
         super(EcaModule, self).__init__()
         if channels is not None:
             t = int(abs(math.log(channels, 2) + beta) / gamma)
@@ -70,13 +78,26 @@ class EcaModule(nn.Module):
             # NOTE 'mlp' mode is a timm experiment, not in paper
             assert channels is not None
             if rd_channels is None:
-                rd_channels = make_divisible(channels * rd_ratio, divisor=rd_divisor)
+                rd_channels = make_divisible(channels * rd_ratio,
+                                             divisor=rd_divisor)
             act_layer = act_layer or nn.ReLU
-            self.conv = nn.Conv1d(1, rd_channels, kernel_size=1, padding=0, bias=True)
+            self.conv = nn.Conv1d(1,
+                                  rd_channels,
+                                  kernel_size=1,
+                                  padding=0,
+                                  bias=True)
             self.act = create_act_layer(act_layer)
-            self.conv2 = nn.Conv1d(rd_channels, 1, kernel_size=kernel_size, padding=padding, bias=True)
+            self.conv2 = nn.Conv1d(rd_channels,
+                                   1,
+                                   kernel_size=kernel_size,
+                                   padding=padding,
+                                   bias=True)
         else:
-            self.conv = nn.Conv1d(1, 1, kernel_size=kernel_size, padding=padding, bias=False)
+            self.conv = nn.Conv1d(1,
+                                  1,
+                                  kernel_size=kernel_size,
+                                  padding=padding,
+                                  bias=False)
             self.act = None
             self.conv2 = None
         self.gate = create_act_layer(gate_layer)
@@ -118,7 +139,13 @@ class CecaModule(nn.Module):
         gate_layer: gating non-linearity to use
     """
 
-    def __init__(self, channels=None, kernel_size=3, gamma=2, beta=1, act_layer=None, gate_layer='sigmoid'):
+    def __init__(self,
+                 channels=None,
+                 kernel_size=3,
+                 gamma=2,
+                 beta=1,
+                 act_layer=None,
+                 gate_layer='sigmoid'):
         super(CecaModule, self).__init__()
         if channels is not None:
             t = int(abs(math.log(channels, 2) + beta) / gamma)
@@ -130,7 +157,11 @@ class CecaModule(nn.Module):
         # see https://github.com/pytorch/pytorch/pull/17240
         # implement manual circular padding
         self.padding = (kernel_size - 1) // 2
-        self.conv = nn.Conv1d(1, 1, kernel_size=kernel_size, padding=0, bias=has_act)
+        self.conv = nn.Conv1d(1,
+                              1,
+                              kernel_size=kernel_size,
+                              padding=0,
+                              bias=has_act)
         self.gate = create_act_layer(gate_layer)
 
     def forward(self, x):

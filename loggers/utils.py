@@ -1,9 +1,9 @@
 from pathlib import Path
 from typing import Union
 
-import wandb
 from omegaconf import DictConfig, OmegaConf
 
+import wandb
 from loggers.wandb_logger import WandbLogger
 
 
@@ -18,7 +18,9 @@ def get_wandb_logger(full_config: DictConfig) -> WandbLogger:
         wandb_id = Path(wandb_runpath).name
         print(f'using provided id {wandb_id}')
 
-    full_config_dict = OmegaConf.to_container(full_config, resolve=True, throw_on_missing=True)
+    full_config_dict = OmegaConf.to_container(full_config,
+                                              resolve=True,
+                                              throw_on_missing=True)
     logger = WandbLogger(
         project=wandb_config.project_name,
         group=wandb_config.group_name,
@@ -32,7 +34,8 @@ def get_wandb_logger(full_config: DictConfig) -> WandbLogger:
     return logger
 
 
-def get_ckpt_path(logger: WandbLogger, wandb_config: DictConfig) -> Union[Path, None]:
+def get_ckpt_path(logger: WandbLogger,
+                  wandb_config: DictConfig) -> Union[Path, None]:
     cfg = wandb_config
     artifact_name = cfg.artifact_name
     assert artifact_name is not None, 'Artifact name is required to resume from checkpoint.'
@@ -42,8 +45,7 @@ def get_ckpt_path(logger: WandbLogger, wandb_config: DictConfig) -> Union[Path, 
         artifact_local_file = Path(artifact_local_file)
     if isinstance(logger, WandbLogger):
         resume_path = logger.get_checkpoint(
-            artifact_name=artifact_name,
-            artifact_filepath=artifact_local_file)
+            artifact_name=artifact_name, artifact_filepath=artifact_local_file)
     else:
         resume_path = artifact_local_file
     assert resume_path.exists()

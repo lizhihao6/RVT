@@ -3,6 +3,7 @@ repos:
     rev: 5.0.4
     hooks:
       - id: flake8
+        args: ['--ignore=E126,E131,E265,E266,E402,E501,E502,E731,F401,F403,F405,F841,W503,W504']
   - repo: https://gitee.com/openmmlab/mirrors-isort
     rev: 5.11.5
     hooks:

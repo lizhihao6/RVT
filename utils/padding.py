@@ -5,7 +5,12 @@ import torch.nn.functional as F
 
 
 class InputPadderFromShape:
-    def __init__(self, desired_hw: Tuple[int, int], mode: str = 'constant', value: int = 0, type: str = 'corner'):
+
+    def __init__(self,
+                 desired_hw: Tuple[int, int],
+                 mode: str = 'constant',
+                 value: int = 0,
+                 type: str = 'corner'):
         """
         :param desired_hw: Desired height and width
         :param mode: See torch.nn.functional.pad
@@ -41,11 +46,16 @@ class InputPadderFromShape:
         pad_bottom = ht_des - ht
 
         pad = [pad_left, pad_right, pad_top, pad_bottom]
-        return F.pad(input_tensor, pad=pad, mode=mode, value=value if mode == 'constant' else None), pad
+        return F.pad(input_tensor,
+                     pad=pad,
+                     mode=mode,
+                     value=value if mode == 'constant' else None), pad
 
     def pad_tensor_ev_repr(self, ev_repr: th.Tensor) -> th.Tensor:
-        padded_ev_repr, pad = self._pad_tensor_impl(input_tensor=ev_repr, desired_hw=self.desired_hw,
-                                                    mode=self.mode, value=self.value)
+        padded_ev_repr, pad = self._pad_tensor_impl(input_tensor=ev_repr,
+                                                    desired_hw=self.desired_hw,
+                                                    mode=self.mode,
+                                                    value=self.value)
         if self._pad_ev_repr is None:
             self._pad_ev_repr = pad
         else:
@@ -56,8 +66,10 @@ class InputPadderFromShape:
         assert isinstance(token_mask, th.Tensor)
 
         desired_hw = tuple(x // 4 for x in self.desired_hw)
-        padded_token_mask, pad = self._pad_tensor_impl(input_tensor=token_mask, desired_hw=desired_hw,
-                                                       mode='constant', value=0)
+        padded_token_mask, pad = self._pad_tensor_impl(input_tensor=token_mask,
+                                                       desired_hw=desired_hw,
+                                                       mode='constant',
+                                                       value=0)
         if self._pad_token_mask is None:
             self._pad_token_mask = pad
         else:
