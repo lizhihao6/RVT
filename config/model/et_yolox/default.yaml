@@ -9,9 +9,6 @@ model:
       enable: False
       args:
         mode: reduce-overhead
-    input_channels: 20
-    enable_masking: False
-    partition_split_32: 2
     embed_dim: 64
     dim_multiplier: [1, 2, 4, 8]
     num_blocks: [1, 1, 1, 1]
