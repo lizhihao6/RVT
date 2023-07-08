@@ -1,14 +1,13 @@
 from math import sqrt
 
 import pointops
-import pytorch3d
 import torch.nn as nn
 import torch.nn.functional
 from timm.models.layers import DropPath
-from torch_scatter import scatter
 
 from .utils import (MLP, EventEmbed, PositionEncoder, SparseConv,
-                    SparseToDense, TransitionDown, offset2batch)
+                    SparseToDense, TransitionDown, default_init_weights,
+                    offset2batch)
 
 
 class EventAttention(nn.Module):
@@ -55,6 +54,8 @@ class EventAttention(nn.Module):
         self.drop_out = nn.Dropout(drop_out)
 
     def forward(self, data_dict):
+        breakpoint()
+        a = 1
         attn = self.local_attn(data_dict)
         if self.conv_kernel_size > 0:
             conv_attn = self.conv_attn(data_dict)
@@ -88,7 +89,7 @@ class EventAttention(nn.Module):
         k = pointops.grouping(idx, k, xyz)  # [N, k_nearest, attn_dim]
         v = pointops.grouping(idx, v, xyz)  # [N, k_nearest, attn_dim]
         local_attn = self.local_fc(q[:, None, :] - k +
-                                   pos_enc) / self.attn_scale  # noqa E127
+                                   pos_enc) / self.attn_scale
         local_attn = self.softmax(local_attn)
         local_attn = self.drop_out(local_attn)
         local_attn = local_attn * (v + pos_enc)
@@ -104,12 +105,7 @@ class EventAttention(nn.Module):
         xyz[..., 2] = 0
         xy = events[:, :2].contiguous()
         batch = offset2batch(offsets)
-        idx = pointops.conv_sampling(xy, batch, self.h, self.w, 11,
-                                     self.k_nearest)
-        mask = torch.where(idx == -1, torch.zeros_like(idx),
-                           torch.ones_like(idx))
-        idx = torch.where(idx == -1, self._get_self_idx(idx),
-                          idx)  # replace -1 idx to self idx
+        idx, _ = pointops.knn_query(self.k_nearest, xyz, batch)
 
         # [N, k_nearest, attn_dim]
         pos_enc = self.conv_pe(xy[:, None, :] \
@@ -122,10 +118,7 @@ class EventAttention(nn.Module):
         q, k, v = q.contiguous(), k.contiguous(), v.contiguous()
         k = pointops.grouping(idx, k, xyz)  # [N, k_nearest, attn_dim]
         v = pointops.grouping(idx, v, xyz)  # [N, k_nearest, attn_dim]
-        conv_attn = self.conv_fc(q[:, None, :] - k + pos_enc) \
-            / self.attn_scale
-        conv_attn = conv_attn * mask[:, :,
-                                     None] + (1 - mask[:, :, None]) * -100
+        conv_attn = self.conv_fc(q[:, None, :] - k + pos_enc) / self.attn_scale
         conv_attn = self.softmax(conv_attn)
         conv_attn = self.drop_out(conv_attn)
         conv_attn = conv_attn * (v + pos_enc)
@@ -169,8 +162,8 @@ class EventAttention(nn.Module):
         v = torch.max(v, dim=1)[0]  # [M, attn_dim]
         k = pointops.grouping(inv_pair_idx, k, xyz)  # [N, k_nearest, attn_dim]
         v = pointops.grouping(inv_pair_idx, v, xyz)  # [N, k_nearest, attn_dim]
-        global_attn = self.global_fc(q[:, None, :] - k + pos_enc) \
-            / self.attn_scale
+        global_attn = self.global_fc(q[:, None, :] - k +
+                                     pos_enc) / self.attn_scale
         global_attn = self.softmax(global_attn)
         global_attn = self.drop_out(global_attn)
         global_attn = global_attn * (v + pos_enc)
@@ -251,12 +244,12 @@ class BasicLayer(nn.Module):
 class EventTransformer(nn.Module):
 
     def __init__(self,
+                 height,
+                 width,
                  embed_dim=32,
                  embed_norm=True,
                  drop_out=0.,
                  drop_path_rate=0.,
-                 height=240,
-                 width=304,
                  conv_ks_list=[5, 3, 3, 3],
                  depth_list=[1, 1, 1, 1],
                  k_nearest_list=[8, 16, 16, 16],
@@ -279,8 +272,12 @@ class EventTransformer(nn.Module):
         self.attn_layers = nn.ModuleList()
         self.sparse_to_denses = nn.ModuleList()
         self.down_samples = nn.ModuleList()
+        self._strides, self._stage_dims = [], []
         for i in range(len(depth_list)):
             dim = int(embed_dim * 2**i)
+            out_stride = out_strides[i]
+            h = height // (2**i) if out_stride < 0 else height // out_stride
+            w = width // (2**i) if out_stride < 0 else width // out_stride
 
             # build attention layer
             attn_layer = BasicLayer(
@@ -289,8 +286,8 @@ class EventTransformer(nn.Module):
                 attn_dim=min(dim, 128),
                 mlp_ratio=mlp_ratio_list[i],
                 k_nearest=k_nearest_list[i],
-                h=height // (2**i),
-                w=width // (2**i),
+                h=h,
+                w=w,
                 conv_kernel_size=conv_ks_list[i],
                 global_step=global_step_list[i],
                 drop_out=drop_out,
@@ -298,14 +295,13 @@ class EventTransformer(nn.Module):
             self.attn_layers.append(attn_layer)
 
             # build sparse to dense layer
-            out_stride = out_strides[i]
             if out_stride > 0:
-                sparse_to_dense = SparseToDense(h=height // out_stride,
-                                                w=width // out_stride,
-                                                dim=dim)
+                sparse_to_dense = SparseToDense(h=h, w=w, dim=dim)
                 self.sparse_to_denses.append(sparse_to_dense)
             else:
                 self.sparse_to_denses.append(None)
+            self._stage_dims.append(dim)
+            self._strides.append(out_stride)
 
             # build downsample layer
             down_stride = down_stride_list[i]
@@ -318,6 +314,20 @@ class EventTransformer(nn.Module):
                 self.down_samples.append(down_sample)
             else:
                 self.down_samples.append(None)
+
+        self.apply(default_init_weights)
+
+    @property
+    def num_stages(self):
+        return len(self.stage_dims)
+
+    @property
+    def strides(self):
+        return self._strides
+
+    @property
+    def stage_dims(self):
+        return self._stage_dims
 
     def forward_features(self, data_dict):
         out_features = []

@@ -15,7 +15,6 @@ from data.genx_utils.labels import ObjectLabels, SparselyBatchedObjectLabels
 class DataType(Enum):
     EV_REPR = auto()
     OFFSETS = auto()
-    SEQ_LENGTH = auto()
     FLOW = auto()
     IMAGE = auto()
     OBJLABELS = auto()

@@ -153,7 +153,6 @@ class SequenceForIter(SequenceBase):
         out = {
             DataType.EV_REPR: ev_repr,
             DataType.OFFSETS: offsets,
-            DataType.SEQ_LENGTH: len(offsets),
             DataType.OBJLABELS_SEQ: sparse_labels,
             DataType.IS_FIRST_SAMPLE: is_first_sample,
             DataType.IS_PADDED_MASK: is_padded_mask,

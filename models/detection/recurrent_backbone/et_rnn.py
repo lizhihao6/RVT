@@ -11,8 +11,7 @@ except ImportError:
 
 from data.utils.types import (BackboneFeatures, FeatureMap, LstmState,
                               LstmStates)
-from models.layers.et.et import (PartitionAttentionCl, PartitionType,
-                                 get_downsample_layer_Cf2Cl, nhwC_2_nChw)
+from models.layers.et import EventTransformer
 from models.layers.rnn import DWSConvLSTM2d
 
 from .base import BaseDetector
@@ -22,20 +21,6 @@ class RNNDetector(BaseDetector):
 
     def __init__(self, mdl_config: DictConfig):
         super().__init__()
-
-        ###### Config ######
-        embed_dim = mdl_config.embed_dim
-        dim_multiplier_per_stage = tuple(mdl_config.dim_multiplier)
-        num_blocks_per_stage = tuple(mdl_config.num_blocks)
-        T_max_chrono_init_per_stage = tuple(mdl_config.T_max_chrono_init)
-
-        num_stages = len(num_blocks_per_stage)
-        assert num_stages == 4
-
-        assert isinstance(embed_dim, int)
-        assert num_stages == len(dim_multiplier_per_stage)
-        assert num_stages == len(num_blocks_per_stage)
-        assert num_stages == len(T_max_chrono_init_per_stage)
 
         ###### Compile if requested ######
         compile_cfg = mdl_config.get('compile', None)
@@ -52,47 +37,54 @@ class RNNDetector(BaseDetector):
                 )
         ##################################
 
-        patch_size = mdl_config.stem.patch_size
-        stride = 1
-        self.stage_dims = [embed_dim * x for x in dim_multiplier_per_stage]
+        # build backbone
+        h, w = mdl_config.in_res_hw
+        mdl_config.feature_extractor.height = h
+        mdl_config.feature_extractor.width = w
+        self.feature_extractor = EventTransformer(
+            **mdl_config.feature_extractor)
+        self.strides = self.feature_extractor.strides
+        self.stage_dims = self.feature_extractor.stage_dims
+        self.num_stages = self.feature_extractor.num_stages
 
+        # build rnns
         self.rnn_stages = nn.ModuleList()
-        self.strides = []
-        for stage_idx, (num_blocks, T_max_chrono_init_stage) in \
-                enumerate(zip(num_blocks_per_stage, T_max_chrono_init_per_stage)):
-            spatial_downsample_factor = patch_size if stage_idx == 0 else 2
-            stage_dim = self.stage_dims[stage_idx]
-            stage = RNNDetectorStage(stage_dim=stage_dim,
-                                     stage_cfg=mdl_config.stage)
-            stride = stride * spatial_downsample_factor
-            self.strides.append(stride)
-
-            self.rnn_stages.append(stage)
-
-        self.num_stages = num_stages
+        for stage_dim in self.stage_dims:
+            if stage_dim > 0:
+                stage = RNNDetectorStage(stage_dim=stage_dim,
+                                         stage_cfg=mdl_config.stage)
+                self.rnn_stages.append(stage)
+            else:
+                self.rnn_stages.append(None)
 
     def get_stage_dims(self, stages: Tuple[int, ...]) -> Tuple[int, ...]:
         stage_indices = [x - 1 for x in stages]
         assert min(stage_indices) >= 0, stage_indices
-        assert max(stage_indices) < len(self.stages), stage_indices
+        assert max(stage_indices) < self.num_stages, stage_indices
         return tuple(self.stage_dims[stage_idx] for stage_idx in stage_indices)
 
     def get_strides(self, stages: Tuple[int, ...]) -> Tuple[int, ...]:
         stage_indices = [x - 1 for x in stages]
         assert min(stage_indices) >= 0, stage_indices
-        assert max(stage_indices) < len(self.stages), stage_indices
+        assert max(stage_indices) < self.num_stages, stage_indices
         return tuple(self.strides[stage_idx] for stage_idx in stage_indices)
 
-    def forward(self, x: th.Tensor, prev_states: Optional[LstmStates] = None, token_mask: Optional[th.Tensor] = None) \
+    def forward(self, events: th.Tensor, offsets: th.Tensor,
+                prev_states: Optional[LstmStates] = None,
+                token_mask: Optional[th.Tensor] = None) \
             -> Tuple[BackboneFeatures, LstmStates]:
         if prev_states is None:
             prev_states = [None] * self.num_stages
         assert len(prev_states) == self.num_stages
-        states: LstmStates = list()
+
+        features = self.feature_extractor(events, offsets)
+        states = []
         output: Dict[int, FeatureMap] = {}
-        for stage_idx, stage in enumerate(self.stages):
-            x, state = stage(x, prev_states[stage_idx],
-                             token_mask if stage_idx == 0 else None)
+        for stage_idx, rnn in enumerate(self.rnn_stages):
+            if rnn is not None:
+                x = features.pop(0)
+                x, state = rnn(x, prev_states[stage_idx],
+                               token_mask if stage_idx == 0 else None)
             states.append(state)
             stage_number = stage_idx + 1
             output[stage_number] = x

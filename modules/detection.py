@@ -29,7 +29,6 @@ class Module(pl.LightningModule):
         self.full_config = full_config
 
         self.mdl_config = full_config.model
-        in_res_hw = tuple(self.mdl_config.backbone.in_res_hw)
 
         self.mdl = YoloXDetector(self.mdl_config)
 
@@ -129,7 +128,7 @@ class Module(pl.LightningModule):
         self.mode_2_rnn_states[mode].reset(
             worker_id=worker_id, indices_or_bool_tensor=is_first_sample)
 
-        sequence_len = len(ev_tensor_sequence)
+        sequence_len = len(offsets_sequence)
         assert sequence_len > 0
         batch_size = len(sparse_obj_labels[0])
         if self.mode_2_batch_size[mode] is None:

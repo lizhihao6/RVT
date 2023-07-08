@@ -9,29 +9,21 @@ model:
       enable: False
       args:
         mode: reduce-overhead
-    embed_dim: 64
-    dim_multiplier: [1, 2, 4, 8]
-    num_blocks: [1, 1, 1, 1]
-    T_max_chrono_init: [4, 8, 16, 32]
-    stem:
-      patch_size: 4
+    feature_extractor:
+      height: ~
+      width: ~
+      embed_dim: 32
+      embed_norm: True
+      drop_out: 0
+      drop_path_rate: 0
+      conv_ks_list: [5, 3, 3, 3]
+      depth_list: [1, 1, 1, 1]
+      k_nearest_list: [8, 16, 16, 16]
+      mlp_ratio_list: [4, 4, 4, 4]
+      global_step_list: [16, 16, 8, 4]
+      down_stride_list: [4, 4, 4, -1]
+      out_strides: [-1, 8, 16, 32]
     stage:
-      downsample:
-        type: patch
-        overlap: True
-        norm_affine: True
-      attention:
-        use_torch_mha: False
-        partition_size: ???
-        dim_head: 32
-        attention_bias: True
-        mlp_activation: gelu
-        mlp_gated: False
-        mlp_bias: True
-        mlp_ratio: 4
-        drop_mlp: 0
-        drop_path: 0
-        ls_init_value: 1e-5
       lstm:
         dws_conv: False
         dws_conv_only_hidden: True

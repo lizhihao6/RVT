@@ -9,40 +9,19 @@ import pointops
 import sparseconvnet as scn
 import torch
 import torch.nn as nn
-from pytorch3d.ops import knn_gather, knn_points, sample_farthest_points
+from timm.models.layers import trunc_normal_
 from torch.nn import init as init
-from torch.nn.modules.batchnorm import _BatchNorm
 
 
-@torch.no_grad()
-def default_init_weights(module_list, scale=1, bias_fill=0, **kwargs):
-    """Initialize network weights.
-
-    Args:
-        module_list (list[nn.Module] | nn.Module): Modules to be initialized.
-        scale (float): Scale initialized weights, especially for residual
-            blocks. Default: 1.
-        bias_fill (float): The value to fill bias. Default: 0
-        kwargs (dict): Other arguments for initialization function.
-    """
-    if not isinstance(module_list, list):
-        module_list = [module_list]
-    for module in module_list:
-        for m in module.modules():
-            if isinstance(m, nn.Conv2d):
-                init.kaiming_normal_(m.weight, **kwargs)
-                m.weight.data *= scale
-                if m.bias is not None:
-                    m.bias.data.fill_(bias_fill)
-            elif isinstance(m, nn.Linear):
-                init.kaiming_normal_(m.weight, **kwargs)
-                m.weight.data *= scale
-                if m.bias is not None:
-                    m.bias.data.fill_(bias_fill)
-            elif isinstance(m, _BatchNorm):
-                init.constant_(m.weight, 1)
-                if m.bias is not None:
-                    m.bias.data.fill_(bias_fill)
+def default_init_weights(m):
+    if isinstance(m, nn.Linear):
+        trunc_normal_(m.weight, std=.02)
+        if isinstance(m, nn.Linear) and m.bias is not None:
+            nn.init.constant_(m.bias, 0)
+    elif isinstance(m, nn.LayerNorm) or isinstance(
+            m, nn.BatchNorm1d) or isinstance(m, nn.BatchNorm2d):
+        nn.init.constant_(m.bias, 0)
+        nn.init.constant_(m.weight, 1.0)
 
 
 class MLP(nn.Module):

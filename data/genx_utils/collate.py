@@ -35,9 +35,11 @@ custom_collate_fn_map[
 def custom_collate(batch: Any):
     # collect ev_repr and offsets from batch
     ev_repr = [sample.pop(DataType.EV_REPR) for sample in batch]
+    # todo convert split 
+    print(batch[0][DataType.OFFSETS].shape)
+    print(len(batch))
+    exit()
     offsets = [sample.pop(DataType.OFFSETS) for sample in batch]
-    ev_repr = torch.cat(ev_repr, dim=0)
-    offsets = torch.cat(offsets, dim=0)
     batch = collate(batch, collate_fn_map=custom_collate_fn_map)
     batch[DataType.EV_REPR] = ev_repr
     batch[DataType.OFFSETS] = offsets
