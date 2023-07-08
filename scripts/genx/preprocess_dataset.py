@@ -89,7 +89,7 @@ class H5Writer:
         maxshape = (None, )
         chunkshape = (1, )
         self.time_key = 'time'
-        self.time_dtype = np.uint32
+        self.time_dtype = np.float32
         self.h5f.create_dataset(self.time_key,
                                 dtype=self.time_dtype,
                                 shape=chunkshape,
@@ -111,7 +111,7 @@ class H5Writer:
         maxshape = (None, 3)
         chunkshape = (1, 3)
         self.indices_key = 'indices'
-        self.indices_dtype = np.float32
+        self.indices_dtype = np.uint32
         self.h5f.create_dataset(self.indices_key,
                                 dtype=self.indices_dtype,
                                 shape=chunkshape,
@@ -540,7 +540,8 @@ def write_event_data(in_h5_file: Path, ev_out_dir: Path, dataset: str,
 
     # regenerate frameidx2repridx
     frameidx2repridx = _frameidx2repridx[_frameidx2repridx > 0]
-    frameidx2repridx = np.cumsum(frameidx2repridx)
+    frameidx2repridx = np.cumsum(
+        frameidx2repridx) - 1  # -1 because we want including last index
 
     # save frameidx2repridx
     frameidx2repridx_file = ev_out_dir / 'objframe_idx_2_repr_idx.npy'

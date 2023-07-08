@@ -417,7 +417,6 @@ class RandomSpatialAugmentorGenX:
                     for key, value in input_.items()}
         raise NotImplementedError
 
-
     def __call__(self, data_dict: LoaderDataDictGenX):
         """
         :param data_dict: LoaderDataDictGenX type, image-based tensors must have (*, h, w) shape.

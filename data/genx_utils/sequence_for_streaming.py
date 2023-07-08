@@ -3,7 +3,6 @@ from typing import List, Optional, Tuple, Union
 
 import h5py
 import numpy as np
-import torch
 from omegaconf import DictConfig
 from torchdata.datapipes.iter import IterDataPipe
 
@@ -71,7 +70,7 @@ class SequenceForIter(SequenceBase):
                          only_load_end_labels=False)
 
         with h5py.File(str(self.ev_repr_file), 'r') as h5f:
-            num_ev_repr = h5f['data'].shape[0]
+            num_ev_repr = h5f['indices'].shape[0]
         if range_indices is None:
             repr_idx_start = max(
                 self.objframe_idx_2_repr_idx[0] - sequence_length + 1, 0)
