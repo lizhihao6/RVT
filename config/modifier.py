@@ -20,31 +20,13 @@ def dynamically_modify_train_config(config: DictConfig):
         dataset_hw = get_dataloading_hw(dataset_config=dataset_cfg)
 
         mdl_cfg = config.model
+        mdl_cfg.dataset_hw = dataset_hw
         mdl_name = mdl_cfg.name
         if mdl_name == 'rnndet':
             backbone_cfg = mdl_cfg.backbone
             backbone_name = backbone_cfg.name
-            if backbone_name == 'MaxViTRNN':
-                partition_split_32 = backbone_cfg.partition_split_32
-                assert partition_split_32 in (1, 2, 4)
-
-                multiple_of = 32 * partition_split_32
-                mdl_hw = _get_modified_hw_multiple_of(hw=dataset_hw,
-                                                      multiple_of=multiple_of)
-                print(
-                    f'Set {backbone_name} backbone (height, width) to {mdl_hw}'
-                )
-                backbone_cfg.in_res_hw = mdl_hw
-
-                attention_cfg = backbone_cfg.stage.attention
-                partition_size = tuple(x // (32 * partition_split_32)
-                                       for x in mdl_hw)
-                assert (mdl_hw[0] // 32) % partition_size[
-                    0] == 0, f'{mdl_hw[0]=}, {partition_size[0]=}'
-                assert (mdl_hw[1] // 32) % partition_size[
-                    1] == 0, f'{mdl_hw[1]=}, {partition_size[1]=}'
-                print(f'Set partition sizes: {partition_size}')
-                attention_cfg.partition_size = partition_size
+            if backbone_name == 'ETRNN':
+                backbone_cfg.in_res_hw = dataset_hw
             else:
                 print(f'{backbone_name=} not available')
                 raise NotImplementedError

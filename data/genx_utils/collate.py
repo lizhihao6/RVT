@@ -6,6 +6,7 @@ import torch
 from data.genx_utils.collate_from_pytorch import (collate,
                                                   default_collate_fn_map)
 from data.genx_utils.labels import ObjectLabels, SparselyBatchedObjectLabels
+from data.utils.types import DataType
 
 
 def collate_object_labels(batch,
@@ -32,7 +33,15 @@ custom_collate_fn_map[
 
 
 def custom_collate(batch: Any):
-    return collate(batch, collate_fn_map=custom_collate_fn_map)
+    # collect ev_repr and offsets from batch
+    ev_repr = [sample.pop(DataType.EV_REPR) for sample in batch]
+    offsets = [sample.pop(DataType.OFFSETS) for sample in batch]
+    ev_repr = torch.cat(ev_repr, dim=0)
+    offsets = torch.cat(offsets, dim=0)
+    batch = collate(batch, collate_fn_map=custom_collate_fn_map)
+    batch[DataType.EV_REPR] = ev_repr
+    batch[DataType.OFFSETS] = offsets
+    return batch
 
 
 def custom_collate_rnd(batch: Any):

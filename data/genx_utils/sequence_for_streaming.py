@@ -136,14 +136,14 @@ class SequenceForIter(SequenceBase):
         with Timer(timer_name='read ev reprs'):
             ev_repr, offsets = self._get_event_repr_torch(start_idx=start_idx,
                                                           end_idx=end_idx)
-        assert len(ev_repr) == sample_len
+        assert len(offsets) == sample_len, f'{len(offsets)=}, {sample_len=}'
         ###########################
 
         # labels ###
         labels = list()
         for repr_idx in range(start_idx, end_idx):
             labels.append(self._get_labels_from_repr_idx(repr_idx))
-        assert len(labels) == len(ev_repr)
+        assert len(labels) == len(offsets), f'{len(labels)=}, {len(offsets)=}'
         ############
 
         # convert labels to sparse labels for datapipes and dataloader
@@ -153,6 +153,7 @@ class SequenceForIter(SequenceBase):
         out = {
             DataType.EV_REPR: ev_repr,
             DataType.OFFSETS: offsets,
+            DataType.SEQ_LENGTH: len(offsets),
             DataType.OBJLABELS_SEQ: sparse_labels,
             DataType.IS_FIRST_SAMPLE: is_first_sample,
             DataType.IS_PADDED_MASK: is_padded_mask,

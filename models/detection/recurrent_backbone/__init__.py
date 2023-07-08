@@ -1,11 +1,11 @@
 from omegaconf import DictConfig
 
-from .maxvit_rnn import RNNDetector as MaxViTRNNDetector
+from .et_rnn import RNNDetector as ETRNNDetector
 
 
 def build_recurrent_backbone(backbone_cfg: DictConfig):
     name = backbone_cfg.name
-    if name == 'MaxViTRNN':
-        return MaxViTRNNDetector(backbone_cfg)
+    if name == 'ETRNN':
+        return ETRNNDetector(backbone_cfg)
     else:
         raise NotImplementedError

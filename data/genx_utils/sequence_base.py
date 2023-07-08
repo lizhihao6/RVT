@@ -99,7 +99,7 @@ class SequenceBase(MapDataPipe):
             indices = h5f['indices'][start_idx:end_idx][:, 1:]
             ev_start_idx = h5f['indices'][start_idx][0]
             ev_end_idx = h5f['indices'][end_idx][1]
-            xy = h5f['pos'][start_idx:end_idx]
+            xy = h5f['pos'][ev_start_idx:ev_end_idx]
             ts = h5f['time'][ev_start_idx:ev_end_idx]
             p = h5f['events'][ev_start_idx:ev_end_idx]
 
@@ -110,6 +110,7 @@ class SequenceBase(MapDataPipe):
         events[:, 3] = p
 
         offsets = indices[:, 1] - indices[0, 0]
+        offsets = offsets.astype(np.int64)
 
         events, offsets = torch.from_numpy(events), torch.from_numpy(offsets)
         return events, offsets

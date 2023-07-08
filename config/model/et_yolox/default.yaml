@@ -4,7 +4,7 @@ defaults:
 
 model:
   backbone:
-    name: MaxViTRNN
+    name: ETRNN
     compile:
       enable: False
       args:

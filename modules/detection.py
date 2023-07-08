@@ -16,7 +16,6 @@ from models.detection.yolox.utils.boxes import postprocess
 from models.detection.yolox_extension.models.detector import YoloXDetector
 from utils.evaluation.prophesee.evaluator import PropheseeEvaluator
 from utils.evaluation.prophesee.io.box_loading import to_prophesee
-from utils.padding import InputPadderFromShape
 
 from .utils.detection import (BackboneFeatureSelector, EventReprSelector, Mode,
                               RNNStates, merge_mixed_batches, mode_2_string)
@@ -31,7 +30,6 @@ class Module(pl.LightningModule):
 
         self.mdl_config = full_config.model
         in_res_hw = tuple(self.mdl_config.backbone.in_res_hw)
-        self.input_padder = InputPadderFromShape(desired_hw=in_res_hw)
 
         self.mdl = YoloXDetector(self.mdl_config)
 
@@ -123,6 +121,7 @@ class Module(pl.LightningModule):
         self.started_training = True
         step = self.trainer.global_step
         ev_tensor_sequence = data[DataType.EV_REPR]
+        offsets_sequence = data[DataType.OFFSETS]
         sparse_obj_labels = data[DataType.OBJLABELS_SEQ]
         is_first_sample = data[DataType.IS_FIRST_SAMPLE]
         token_mask_sequence = data.get(DataType.TOKEN_MASK, None)
@@ -146,12 +145,8 @@ class Module(pl.LightningModule):
         for tidx in range(sequence_len):
             ev_tensors = ev_tensor_sequence[tidx]
             ev_tensors = ev_tensors.to(dtype=self.dtype)
-            ev_tensors = self.input_padder.pad_tensor_ev_repr(ev_tensors)
-            if token_mask_sequence is not None:
-                token_masks = self.input_padder.pad_token_mask(
-                    token_mask=token_mask_sequence[tidx])
-            else:
-                token_masks = None
+
+            offsets = offsets_sequence[tidx]
 
             if self.mode_2_hw[mode] is None:
                 self.mode_2_hw[mode] = tuple(ev_tensors.shape[-2:])
@@ -159,9 +154,7 @@ class Module(pl.LightningModule):
                 assert self.mode_2_hw[mode] == ev_tensors.shape[-2:]
 
             backbone_features, states = self.mdl.forward_backbone(
-                x=ev_tensors,
-                previous_states=prev_states,
-                token_mask=token_masks)
+                x=ev_tensors, offsets=offsets, previous_states=prev_states)
             prev_states = states
 
             current_labels, valid_batch_indices = sparse_obj_labels[
@@ -248,6 +241,7 @@ class Module(pl.LightningModule):
 
         assert mode in (Mode.VAL, Mode.TEST)
         ev_tensor_sequence = data[DataType.EV_REPR]
+        offsets_sequence = data[DataType.OFFSETS]
         sparse_obj_labels = data[DataType.OBJLABELS_SEQ]
         is_first_sample = data[DataType.IS_FIRST_SAMPLE]
 
@@ -272,14 +266,14 @@ class Module(pl.LightningModule):
                                   (self.mode_2_sampling_mode[mode] == DatasetSamplingMode.STREAM)
             ev_tensors = ev_tensor_sequence[tidx]
             ev_tensors = ev_tensors.to(dtype=self.dtype)
-            ev_tensors = self.input_padder.pad_tensor_ev_repr(ev_tensors)
+
+            offsets = offsets_sequence[tidx]
+
             if self.mode_2_hw[mode] is None:
-                self.mode_2_hw[mode] = tuple(ev_tensors.shape[-2:])
-            else:
-                assert self.mode_2_hw[mode] == ev_tensors.shape[-2:]
+                self.mode_2_hw[mode] = self.mdl_config.backbone.in_res_hw
 
             backbone_features, states = self.mdl.forward_backbone(
-                x=ev_tensors, previous_states=prev_states)
+                x=ev_tensors, offsets=offsets, previous_states=prev_states)
             prev_states = states
 
             if collect_predictions:
